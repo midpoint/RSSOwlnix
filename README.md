@@ -1,5 +1,7 @@
 # RSSOwlnix 3.0.1
 
+[简体中文](README_zh_CN.md)
+
 RSSOwlnix is a fork of RSSOwl, an RSS/Atom feed reader built on Eclipse RCP.
 
 ## What's new in 3.0.1
