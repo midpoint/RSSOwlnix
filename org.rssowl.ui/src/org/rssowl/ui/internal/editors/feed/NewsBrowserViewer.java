@@ -24,6 +24,7 @@
 
 package org.rssowl.ui.internal.editors.feed;
 
+import org.eclipse.core.commands.ParameterizedCommand;
 import org.eclipse.core.runtime.Assert;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -32,6 +33,10 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.GroupMarker;
+import org.eclipse.jface.bindings.Binding;
+import org.eclipse.jface.bindings.Scheme;
+import org.eclipse.jface.bindings.keys.KeySequence;
+import org.eclipse.jface.bindings.keys.KeyStroke;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IMenuListener;
 import org.eclipse.jface.action.IMenuManager;
@@ -52,6 +57,9 @@ import org.eclipse.jface.window.SameShellProvider;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.browser.Browser;
+import org.eclipse.swt.browser.BrowserFunction;
+import org.eclipse.swt.browser.ProgressEvent;
+import org.eclipse.swt.browser.ProgressListener;
 import org.eclipse.swt.events.DisposeEvent;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Composite;
@@ -61,6 +69,9 @@ import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.ui.IWorkbenchActionConstants;
 import org.eclipse.ui.IWorkbenchWindowActionDelegate;
+import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.handlers.IHandlerService;
+import org.eclipse.ui.keys.IBindingService;
 import org.eclipse.ui.internal.IObjectActionContributor;
 import org.rssowl.core.Owl;
 import org.rssowl.core.connection.ConnectionException;
@@ -113,14 +124,17 @@ import org.rssowl.ui.internal.editors.feed.NewsBrowserLabelProvider.Dynamic;
 import org.rssowl.ui.internal.undo.NewsStateOperation;
 import org.rssowl.ui.internal.undo.StickyOperation;
 import org.rssowl.ui.internal.undo.UndoStack;
+import org.rssowl.ui.internal.util.ArticleExtractor;
 import org.rssowl.ui.internal.util.CBrowser;
 import org.rssowl.ui.internal.util.JobRunner;
 import org.rssowl.ui.internal.util.JobTracker;
 import org.rssowl.ui.internal.util.MBrowserEmbedded;
 import org.rssowl.ui.internal.util.ModelUtils;
 import org.rssowl.ui.internal.util.UIBackgroundJob;
+import org.rssowl.ui.internal.util.VideoResolver;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -138,6 +152,7 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.regex.Pattern;
 
 /**
  * @author bpasero
@@ -176,6 +191,20 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
   /* Unique identifier of the <body> element */
   private static final String BODY_ELEMENT_ID = "owlbody"; //$NON-NLS-1$
 
+  /* Minimum text length of a full-content result before trying local extraction */
+  private static final int MIN_TRANSFORMED_TEXT_LENGTH = 1000;
+
+  /* Maximum size of an article page fetched for local extraction */
+  private static final int MAX_ARTICLE_HTML_BYTES = 5 * 1024 * 1024;
+
+  /* Matches timestamps that some feeds provide as the only content */
+  private static final Pattern DATE_TIME_PATTERN = Pattern.compile(
+      "\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}(?:[ T]+\\d{1,2}:\\d{2}(?::\\d{2})?)?" //$NON-NLS-1$
+          + "|\\d{4}年\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{2}(?::\\d{2})?)?" //$NON-NLS-1$
+          + "|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{2}(?::\\d{2})?)?" //$NON-NLS-1$
+          + "|\\d{1,2}:\\d{2}(?::\\d{2})?" //$NON-NLS-1$
+          + "|\\d{1,2}[-/.]\\d{1,2}"); //$NON-NLS-1$
+
   private Object fInput;
   private CBrowser fBrowser;
   private IFeedViewSite fSite;
@@ -197,6 +226,8 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
   private final INewsDAO fNewsDao = OwlDAO.getDAO(INewsDAO.class);
   private final JobTracker fUserInteractionTracker = new JobTracker(USER_INTERACTION_DELAY, false, true, Priority.INTERACTIVE);
   private final Set<Long> fMarkedUnreadByUserCache = Collections.synchronizedSet(new HashSet<Long>());
+  private final Set<Long> fAutoTransformedNews = Collections.synchronizedSet(new HashSet<Long>());
+  private BrowserFunction fKeyFunction;
 
   /* This viewer's sorter. <code>null</code> means there is no sorter. */
   private ViewerComparator fSorter;
@@ -382,6 +413,36 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
     fBrowser.addLinkHandler(NEXT_PAGE_HANDLER_ID, this);
     fBrowser.addLinkHandler(SCROLL_NEXT_PAGE_HANDLER_ID, this);
 
+    /* Forward key strokes from the browser to the workbench key bindings */
+    try {
+      fKeyFunction = new BrowserFunction(fBrowser.getControl(), "rssowlHandleKey") { //$NON-NLS-1$
+        @Override
+        public Object function(Object[] arguments) {
+          return Boolean.valueOf(handleBrowserKey(arguments));
+        }
+      };
+    } catch (RuntimeException e) {
+      fKeyFunction = null;
+    }
+
+    /* Automatically retrieve the full content for a single, empty news page */
+    fBrowser.getControl().addProgressListener(new ProgressListener() {
+      @Override
+      public void changed(ProgressEvent event) {
+        installBrowserEnhancements();
+      }
+
+      @Override
+      public void completed(ProgressEvent event) {
+        installBrowserEnhancements();
+        if (fInput instanceof INews && !fBrowser.getControl().isDisposed()) {
+          String inputUrl = fServer.toUrl(fId, fInput);
+          if (inputUrl.equals(fBrowser.getControl().getUrl()))
+            autoTransformNewsIfNecessary((INews) fInput);
+        }
+      }
+    });
+
     /* React on User Interaction (Mouse Scrolling, Mouse Down, Key Pressed) */
     Listener listener = new Listener() {
       @Override
@@ -392,6 +453,8 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
     fBrowser.getControl().addListener(SWT.MouseWheel, listener);
     fBrowser.getControl().addListener(SWT.MouseDown, listener);
     fBrowser.getControl().addListener(SWT.KeyDown, listener);
+
+    installBrowserEnhancements();
   }
 
   private void onUserInteraction() {
@@ -406,6 +469,204 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
 
     /* Tell the tracker about user interaction*/
     fUserInteractionTracker.run(new UserInteractionTask(fViewModel, fBrowser));
+  }
+
+  private void installBrowserEnhancements() {
+    if (fBrowser.getControl().isDisposed())
+      return;
+
+    StringBuilder js = new StringBuilder();
+    js.append("if (!window.__rssowlEnhanced) {"); //$NON-NLS-1$
+    js.append("window.__rssowlEnhanced = true;"); //$NON-NLS-1$
+    js.append("window.rssowlFixImages = function() {"); //$NON-NLS-1$
+    js.append("  var imgs = document.getElementsByTagName('img');"); //$NON-NLS-1$
+    js.append("  for (var i = 0; i < imgs.length; i++) {"); //$NON-NLS-1$
+    js.append("    var img = imgs[i];"); //$NON-NLS-1$
+    js.append("    if (img.getAttribute('data-rssowl-proxy') === '1') continue;"); //$NON-NLS-1$
+    js.append("    var src = img.src || '';"); //$NON-NLS-1$
+    js.append("    if (!src || /^data:/i.test(src) || src.indexOf('imageProxy=') >= 0) continue;"); //$NON-NLS-1$
+    js.append("    img.setAttribute('data-rssowl-proxy', '1');"); //$NON-NLS-1$
+    js.append("    img.setAttribute('data-rssowl-original', src);"); //$NON-NLS-1$
+    js.append("    img.onerror = function() {"); //$NON-NLS-1$
+    js.append("      var original = this.getAttribute('data-rssowl-original') || '';"); //$NON-NLS-1$
+    js.append("      if (!original) return;"); //$NON-NLS-1$
+    js.append("      var tried = this.getAttribute('data-rssowl-proxy-tried') || '';"); //$NON-NLS-1$
+    js.append("      if (/googleusercontent\\.com|blogspot\\.com/i.test(original) && tried.indexOf('weserv') < 0) {"); //$NON-NLS-1$
+    js.append("        this.setAttribute('data-rssowl-proxy-tried', tried + 'weserv');"); //$NON-NLS-1$
+    js.append("        this.src = 'https://images.weserv.nl/?url=' + encodeURIComponent(original);"); //$NON-NLS-1$
+    js.append("        return;"); //$NON-NLS-1$
+    js.append("      }"); //$NON-NLS-1$
+    js.append("      if (tried.indexOf('local') < 0) {"); //$NON-NLS-1$
+    js.append("        this.setAttribute('data-rssowl-proxy-tried', tried + 'local');"); //$NON-NLS-1$
+    js.append("        var referer = document.baseURI || window.location.href;"); //$NON-NLS-1$
+    js.append("        var origin = window.location.protocol + '//' + window.location.host;"); //$NON-NLS-1$
+    js.append("        this.src = origin + '/?imageProxy=' + encodeURIComponent(original) + '&referer=' + encodeURIComponent(referer);"); //$NON-NLS-1$
+    js.append("      }"); //$NON-NLS-1$
+    js.append("    };"); //$NON-NLS-1$
+    js.append("    if (img.complete && img.naturalWidth === 0) img.onerror();"); //$NON-NLS-1$
+    js.append("  }"); //$NON-NLS-1$
+    js.append("};"); //$NON-NLS-1$
+    js.append("document.addEventListener('keydown', function(e) {"); //$NON-NLS-1$
+    js.append("  try {"); //$NON-NLS-1$
+    js.append("    if (!e || e.isComposing || e.key === 'Process' || e.key === 'Dead' || e.key === 'Unidentified') return;"); //$NON-NLS-1$
+    js.append("    if (e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta' || e.key === 'OS') return;"); //$NON-NLS-1$
+    js.append("    var t = e.target;"); //$NON-NLS-1$
+    js.append("    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;"); //$NON-NLS-1$
+    js.append("    if (e.ctrlKey && e.altKey) return;"); //$NON-NLS-1$
+    js.append("    if (typeof window.rssowlHandleKey === 'function' && window.rssowlHandleKey(e.key, e.ctrlKey || false, e.altKey || false, e.shiftKey || false, e.metaKey || false)) {"); //$NON-NLS-1$
+    js.append("      e.preventDefault();"); //$NON-NLS-1$
+    js.append("      e.stopPropagation();"); //$NON-NLS-1$
+    js.append("    }"); //$NON-NLS-1$
+    js.append("  } catch (err) {}"); //$NON-NLS-1$
+    js.append("}, true);"); //$NON-NLS-1$
+    js.append("}"); //$NON-NLS-1$
+    js.append("if (window.rssowlFixImages) window.rssowlFixImages();"); //$NON-NLS-1$
+    fBrowser.execute(js.toString(), "installBrowserEnhancements"); //$NON-NLS-1$
+  }
+
+  private boolean handleBrowserKey(Object[] arguments) {
+    if (arguments == null || arguments.length < 5 || fBrowser.getControl().isDisposed())
+      return false;
+
+    boolean ctrl = isTrue(arguments[1]);
+    boolean alt = isTrue(arguments[2]);
+    boolean shift = isTrue(arguments[3]);
+    boolean meta = isTrue(arguments[4]);
+    if (ctrl && alt)
+      return false;
+
+    String key = arguments[0] != null ? arguments[0].toString() : ""; //$NON-NLS-1$
+    int keyCode = toKeyCode(key);
+    if (keyCode == 0)
+      return false;
+
+    int stateMask = 0;
+    if (ctrl)
+      stateMask |= SWT.CTRL;
+    if (alt)
+      stateMask |= SWT.ALT;
+    if (shift)
+      stateMask |= SWT.SHIFT;
+    if (meta)
+      stateMask |= SWT.COMMAND;
+
+    IBindingService bindingService = getBindingService();
+    if (bindingService == null)
+      return false;
+
+    Binding binding = findBinding(bindingService, createKeySequence(stateMask, keyCode));
+    if (binding == null && shift && isShiftedPunctuation(keyCode))
+      binding = findBinding(bindingService, createKeySequence(stateMask & ~SWT.SHIFT, keyCode));
+    if (binding == null)
+      return false;
+
+    ParameterizedCommand command = binding.getParameterizedCommand();
+    if (command == null)
+      return false;
+
+    try {
+      IHandlerService handlerService = PlatformUI.getWorkbench().getService(IHandlerService.class);
+      if (handlerService != null) {
+        handlerService.executeCommand(command, null);
+        return true;
+      }
+    } catch (Exception e) {
+      // Ignore commands that are not enabled in the current context
+    }
+
+    return false;
+  }
+
+  private Binding findBinding(IBindingService bindingService, KeySequence sequence) {
+    if (sequence == null)
+      return null;
+
+    Binding perfectMatch = bindingService.getPerfectMatch(sequence);
+    if (perfectMatch != null)
+      return perfectMatch;
+
+    Scheme activeScheme = bindingService.getActiveScheme();
+    String schemeId = activeScheme != null ? activeScheme.getId() : null;
+    for (Binding binding : bindingService.getBindings()) {
+      if (sequence.equals(binding.getTriggerSequence()) && (schemeId == null || schemeId.equals(binding.getSchemeId())))
+        return binding;
+    }
+
+    return null;
+  }
+
+  private KeySequence createKeySequence(int stateMask, int keyCode) {
+    try {
+      return KeySequence.getInstance(KeyStroke.getInstance(stateMask, keyCode));
+    } catch (IllegalArgumentException e) {
+      return null;
+    }
+  }
+
+  private IBindingService getBindingService() {
+    if (PlatformUI.getWorkbench() == null)
+      return null;
+
+    return PlatformUI.getWorkbench().getService(IBindingService.class);
+  }
+
+  private int toKeyCode(String key) {
+    if ("ArrowLeft".equals(key) || "Left".equals(key)) //$NON-NLS-1$ //$NON-NLS-2$
+      return SWT.ARROW_LEFT;
+    if ("ArrowRight".equals(key) || "Right".equals(key)) //$NON-NLS-1$ //$NON-NLS-2$
+      return SWT.ARROW_RIGHT;
+    if ("ArrowUp".equals(key) || "Up".equals(key)) //$NON-NLS-1$ //$NON-NLS-2$
+      return SWT.ARROW_UP;
+    if ("ArrowDown".equals(key) || "Down".equals(key)) //$NON-NLS-1$ //$NON-NLS-2$
+      return SWT.ARROW_DOWN;
+    if ("Enter".equals(key)) //$NON-NLS-1$
+      return SWT.CR;
+    if ("Escape".equals(key) || "Esc".equals(key)) //$NON-NLS-1$ //$NON-NLS-2$
+      return SWT.ESC;
+    if ("Tab".equals(key)) //$NON-NLS-1$
+      return SWT.TAB;
+    if ("Backspace".equals(key)) //$NON-NLS-1$
+      return SWT.BS;
+    if ("Delete".equals(key) || "Del".equals(key)) //$NON-NLS-1$ //$NON-NLS-2$
+      return SWT.DEL;
+    if (" ".equals(key) || "Spacebar".equals(key)) //$NON-NLS-1$ //$NON-NLS-2$
+      return SWT.SPACE;
+    if ("Home".equals(key)) //$NON-NLS-1$
+      return SWT.HOME;
+    if ("End".equals(key)) //$NON-NLS-1$
+      return SWT.END;
+    if ("PageUp".equals(key)) //$NON-NLS-1$
+      return SWT.PAGE_UP;
+    if ("PageDown".equals(key)) //$NON-NLS-1$
+      return SWT.PAGE_DOWN;
+    if ("Insert".equals(key)) //$NON-NLS-1$
+      return SWT.INSERT;
+
+    if (key.length() > 1 && key.charAt(0) == 'F') {
+      try {
+        int number = Integer.parseInt(key.substring(1));
+        if (number >= 1 && number <= 12)
+          return SWT.F1 + number - 1;
+      } catch (NumberFormatException e) {
+        // Not a function key
+      }
+    }
+
+    if (key.length() == 1) {
+      char character = key.charAt(0);
+      if (character >= 32 && character < 127)
+        return Character.toUpperCase(character);
+    }
+
+    return 0;
+  }
+
+  private boolean isShiftedPunctuation(int keyCode) {
+    return keyCode > 32 && keyCode < 127 && !Character.isLetterOrDigit((char) keyCode);
+  }
+
+  private boolean isTrue(Object value) {
+    return Boolean.TRUE.equals(value) || "true".equals(String.valueOf(value)); //$NON-NLS-1$
   }
 
   private void hookNewsContextMenu() {
@@ -1141,9 +1402,10 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
       js.append(getElementById(Dynamic.TITLE.getId(news))).append(".className='titleCollapsed'; "); //$NON-NLS-1$
 
     /* Update News Content as needed */
-    if (expanded)
+    if (expanded) {
       fillNewsContent(news, js, newsLink);
-    else
+      js.append("if (window.rssowlFixImages) window.rssowlFixImages(); "); //$NON-NLS-1$
+    } else
       js.append(getElementById(Dynamic.CONTENT.getId(news)).append(".innerHTML = ''; ")); //$NON-NLS-1$
 
     /* Scroll expanded news into view as necessary */
@@ -1168,6 +1430,12 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
       }
     });
 
+    /* Automatically retrieve full content if the expanded news is empty */
+    if (expanded)
+      autoTransformNewsIfNecessary(news);
+    else
+      fAutoTransformedNews.remove(news.getId());
+
     /* Update State if not already marked as read */
     if (fMarkReadOnExpand && expanded && news.getState() != INews.State.READ && !isGroupingByState()) { //Ignore if grouping by state to avoid refresh
       Set<INews> singleNewsSet = Collections.singleton(news);
@@ -1187,7 +1455,7 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
     if (StringUtils.isSet(description) && !description.equals(news.getTitle())) {
       IBaseLabelProvider labelProvider = getLabelProvider();
       if (labelProvider instanceof NewsBrowserLabelProvider) {
-        description = ((NewsBrowserLabelProvider) labelProvider).stripMediaTagsIfNecessary(description);
+        description = ((NewsBrowserLabelProvider) labelProvider).prepareNewsContent(description);
         description = ((NewsBrowserLabelProvider) labelProvider).highlightSearchTermsIfNecessary(description);
       }
     }
@@ -1326,16 +1594,52 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
     fBrowser.execute(js.toString(), "blur"); //$NON-NLS-1$
   }
 
+  private void autoTransformNewsIfNecessary(INews news) {
+    if (news == null || !StringUtils.isSet(CoreUtils.getLink(news)) || !isMetadataOnlyContent(news))
+      return;
+
+    /* Only attempt once automatically to avoid repeated network requests */
+    if (fAutoTransformedNews.add(news.getId()))
+      transformNews(news);
+  }
+
+  /*
+   * Returns true if the news has no displayable content. Besides an empty
+   * description this also covers feeds that only provide a timestamp for
+   * pages whose content is a video or a gallery.
+   */
+  private boolean isMetadataOnlyContent(INews news) {
+    if (CoreUtils.isEmpty(news))
+      return true;
+
+    String description = news.getDescription();
+    if (description == null)
+      return true;
+
+    /* Timestamp-only descriptions are short, avoid parsing large full content */
+    if (description.length() > 1024)
+      return false;
+
+    /* Normalize non-breaking spaces so that they do not count as content */
+    description = description.replace("&nbsp;", " ").replace("&#160;", " ").replace(' ', ' '); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+    String withoutTimestamps = DATE_TIME_PATTERN.matcher(description).replaceAll(" "); //$NON-NLS-1$
+    return ArticleExtractor.textLength(withoutTimestamps) == 0;
+  }
+
   private void transformNews(final INews news) {
     String link = CoreUtils.getLink(news);
     if (!StringUtils.isSet(link))
       return;
 
-    /* Indicate Progress */
+    /* Indicate Progress (the link is optional if the footer is hidden) */
+    StringBuilder fullContentLink = getElementById(Dynamic.FULL_CONTENT_LINK.getId(news));
+    StringBuilder fullContentText = getElementById(Dynamic.FULL_CONTENT_LINK_TEXT.getId(news));
     StringBuilder js = new StringBuilder();
-    js.append(getElementById(Dynamic.FULL_CONTENT_LINK_TEXT.getId(news)).append(".innerHTML='").append(escapeForInnerHtml(Messages.NewsBrowserViewer_LOADING)).append("'; ")); //$NON-NLS-1$ //$NON-NLS-2$
-    js.append(getElementById(Dynamic.FULL_CONTENT_LINK.getId(news)).append(".blur(); ")); //$NON-NLS-1$
-    js.append(getElementById(Dynamic.FULL_CONTENT_LINK.getId(news)).append(".style.fontStyle = 'italic'; ")); //$NON-NLS-1$
+    js.append("if (").append(fullContentText).append(") {"); //$NON-NLS-1$ //$NON-NLS-2$
+    js.append(fullContentText).append(".innerHTML='").append(escapeForInnerHtml(Messages.NewsBrowserViewer_LOADING)).append("'; } "); //$NON-NLS-1$ //$NON-NLS-2$
+    js.append("if (").append(fullContentLink).append(") {"); //$NON-NLS-1$ //$NON-NLS-2$
+    js.append(fullContentLink).append(".blur(); "); //$NON-NLS-1$
+    js.append(fullContentLink).append(".style.fontStyle = 'italic'; } "); //$NON-NLS-1$
     fBrowser.execute(js.toString(), "transformNews"); //$NON-NLS-1$
 
     /* First cancel all running jobs for this news if any */
@@ -1373,6 +1677,13 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
                 }
               }
             }
+
+            /* The online service sometimes returns only a teaser - try to extract the article locally */
+            if (!monitor.isCanceled()) {
+              String enhancedResult = extractFullContent(link, result.toString(), monitor);
+              result.setLength(0);
+              result.append(enhancedResult);
+            }
           }
         } catch (URISyntaxException e) {
           Activator.getDefault().logError(e.getMessage(), e);
@@ -1393,7 +1704,66 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
     JobRunner.runUIUpdater(transformationJob, true);
   }
 
+  private String extractFullContent(String link, String transformed, IProgressMonitor monitor) {
+    if (monitor.isCanceled())
+      return transformed;
+
+    int transformedTextLength = ArticleExtractor.textLength(transformed);
+    if (transformedTextLength >= MIN_TRANSFORMED_TEXT_LENGTH)
+      return transformed;
+
+    InputStream input = null;
+    try {
+      URI articleUri = new URI(link);
+      IProtocolHandler handler = Owl.getConnectionService().getHandler(articleUri);
+      if (handler == null)
+        return transformed;
+
+      input = handler.openStream(articleUri, monitor, null);
+      ByteArrayOutputStream output = new ByteArrayOutputStream(64 * 1024);
+      byte[] buffer = new byte[8192];
+      int total = 0;
+      int read;
+      while (!monitor.isCanceled() && (read = input.read(buffer)) != -1) {
+        int bytesToWrite = Math.min(read, MAX_ARTICLE_HTML_BYTES - total);
+        if (bytesToWrite <= 0)
+          break;
+        output.write(buffer, 0, bytesToWrite);
+        total += bytesToWrite;
+      }
+
+      if (monitor.isCanceled() || total == 0)
+        return transformed;
+
+      String html = ArticleExtractor.decode(output.toByteArray());
+      ArticleExtractor.Result extracted = ArticleExtractor.extract(html, articleUri);
+      boolean textImproved = extracted != null && extracted.getTextLength() > transformedTextLength + 100;
+      boolean mediaRelevant = extracted != null && extracted.hasMedia() && (transformedTextLength < 200 || extracted.getTextLength() >= transformedTextLength);
+      if (textImproved || mediaRelevant) {
+        String extractedHtml = VideoResolver.resolve(extracted.getHtml(), monitor);
+        return "<!-- rssowl-extracted -->" + extractedHtml; //$NON-NLS-1$
+      }
+    } catch (URISyntaxException e) {
+      // Keep the original transformation
+    } catch (ConnectionException e) {
+      // Keep the original transformation
+    } catch (IOException e) {
+      // Keep the original transformation
+    } finally {
+      if (input != null) {
+        try {
+          input.close();
+        } catch (IOException e) {
+          // Ignore
+        }
+      }
+    }
+
+    return transformed;
+  }
+
   private void showTransformation(INews news, String result) {
+    installBrowserEnhancements();
 
     /* Transformer script surrounds content with a DIV, display it inline to avoid extra whitespace */
     int index = result.indexOf("<div"); //$NON-NLS-1$
@@ -1409,15 +1779,24 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
     /* Support stripping media tags if set and highlight search terms if any */
     IBaseLabelProvider labelProvider = getLabelProvider();
     if (labelProvider instanceof NewsBrowserLabelProvider) {
-      result = ((NewsBrowserLabelProvider) labelProvider).stripMediaTagsIfNecessary(result);
+      result = ((NewsBrowserLabelProvider) labelProvider).prepareNewsContent(result);
       result = ((NewsBrowserLabelProvider) labelProvider).highlightSearchTermsIfNecessary(result);
     }
 
+    /* Guard against the news no longer being displayed while loading */
+    StringBuilder content = getElementById(Dynamic.CONTENT.getId(news));
+    StringBuilder fullContentLink = getElementById(Dynamic.FULL_CONTENT_LINK.getId(news));
+    StringBuilder fullContentText = getElementById(Dynamic.FULL_CONTENT_LINK_TEXT.getId(news));
     final StringBuilder js = new StringBuilder();
-    js.append(getElementById(Dynamic.CONTENT.getId(news)).append(".innerHTML='").append(escapeForInnerHtml(result)).append("'; ")); //$NON-NLS-1$ //$NON-NLS-2$
-    js.append(getElementById(Dynamic.FULL_CONTENT_LINK.getId(news)).append(".style.fontStyle = 'normal'; ")); //$NON-NLS-1$
-    js.append(getElementById(Dynamic.FULL_CONTENT_LINK_TEXT.getId(news)).append(".innerHTML='").append(escapeForInnerHtml(Messages.NewsBrowserViewer_FULL_CONTENT)).append("'; ")); //$NON-NLS-1$ //$NON-NLS-2$
+    js.append("if (").append(content).append(") {"); //$NON-NLS-1$ //$NON-NLS-2$
+    js.append(content).append(".innerHTML='").append(escapeForInnerHtml(result)).append("'; "); //$NON-NLS-1$ //$NON-NLS-2$
+    js.append("if (").append(fullContentLink).append(") {"); //$NON-NLS-1$ //$NON-NLS-2$
+    js.append(fullContentLink).append(".style.fontStyle = 'normal'; } "); //$NON-NLS-1$
+    js.append("if (").append(fullContentText).append(") {"); //$NON-NLS-1$ //$NON-NLS-2$
+    js.append(fullContentText).append(".innerHTML='").append(escapeForInnerHtml(Messages.NewsBrowserViewer_FULL_CONTENT)).append("'; } "); //$NON-NLS-1$ //$NON-NLS-2$
+    js.append("if (window.rssowlFixImages) window.rssowlFixImages(); "); //$NON-NLS-1$
     scrollIfNecessary(news, js);
+    js.append("} "); //$NON-NLS-1$
 
     /* Block external navigation while setting innerHTML */
     fBrowser.blockExternalNavigationWhile(new Runnable() {
@@ -1710,6 +2089,8 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
   @Override
   protected void handleDispose(DisposeEvent event) {
     fServer.unregister(fId);
+    if (fKeyFunction != null && !fKeyFunction.isDisposed())
+      fKeyFunction.dispose();
     fCurrentSelection = null;
     OwlUI.safeDispose(fNewsContextMenu);
     OwlUI.safeDispose(fAttachmentsContextMenu);
@@ -1765,6 +2146,9 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
 
     /* Clear Cache of news marked as unread by user */
     fMarkedUnreadByUserCache.clear();
+
+    /* Allow automatic full content retrieval for the new input */
+    fAutoTransformedNews.clear();
 
     /* Update Settings based on Input */
     if (fSite != null) {
@@ -1927,6 +2311,10 @@ public class NewsBrowserViewer extends ContentViewer implements ILinkHandler {
 
       /* Newspaper Layout */
       else {
+        INews news = resolve(newsToShow.getId());
+        if (news != null)
+          autoTransformNewsIfNecessary(news);
+
         StringBuilder js = new StringBuilder();
         js.append(getElementById(Dynamic.NEWS.getId(newsToShow))).append(".scrollIntoView(true);"); //$NON-NLS-1$
         fBrowser.execute(js.toString(), "showSelection"); //$NON-NLS-1$

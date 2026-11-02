@@ -60,6 +60,7 @@ public class SyncItem implements Serializable {
 
   private final String fId;
   private final String fStreamId;
+  private String fFeedLink;
   private boolean fMarkedRead;
   private boolean fMarkedUnread;
   private boolean fStarred;
@@ -231,13 +232,19 @@ public class SyncItem implements Serializable {
   public static SyncItem toSyncItem(INews news) {
     String itemId = news.getGuid().getValue();
     String streamId = news.getInReplyTo();
+    String feedLink = news.getFeedLinkAsText();
 
-    return new SyncItem(itemId, streamId);
+    return new SyncItem(itemId, streamId, feedLink);
   }
 
   SyncItem(String id, String streamId) {
+    this(id, streamId, null);
+  }
+
+  SyncItem(String id, String streamId, String feedLink) {
     fId = id;
     fStreamId = streamId;
+    fFeedLink = feedLink;
   }
 
   /**
@@ -252,6 +259,32 @@ public class SyncItem implements Serializable {
    */
   public String getStreamId() {
     return fStreamId;
+  }
+
+  /**
+   * @return the link of the feed this item belongs to or <code>null</code> if
+   * unknown.
+   */
+  public String getFeedLink() {
+    return fFeedLink;
+  }
+
+  /**
+   * @return a key that uniquely identifies this item within all synchronized
+   * accounts.
+   */
+  public String getKey() {
+    return toKey(fFeedLink, fId);
+  }
+
+  /**
+   * @param feedLink the link of the feed or <code>null</code> if unknown.
+   * @param id the identifier of the item.
+   * @return a key that uniquely identifies the item within all synchronized
+   * accounts.
+   */
+  public static String toKey(String feedLink, String id) {
+    return feedLink != null ? feedLink + '#' + id : id;
   }
 
   /**
@@ -364,6 +397,10 @@ public class SyncItem implements Serializable {
    */
   public void merge(SyncItem item) {
 
+    /* Complete feed link of legacy items */
+    if (fFeedLink == null)
+      fFeedLink = item.fFeedLink;
+
     /* Mark Read */
     if (item.fMarkedRead)
       setMarkedRead();
@@ -403,17 +440,20 @@ public class SyncItem implements Serializable {
    * {@link SyncItem} to.
    */
   public void applyTo(INews news) {
+    boolean isFever = SyncUtils.isFever(fFeedLink != null ? fFeedLink : news.getFeedLinkAsText());
+    String markedRead = isFever ? SyncUtils.FEVER_MARKED_READ : SyncUtils.GOOGLE_MARKED_READ;
+    String markedUnread = isFever ? SyncUtils.FEVER_MARKED_UNREAD : SyncUtils.GOOGLE_MARKED_UNREAD;
 
     /* Mark Read */
     if (isMarkedRead()) {
-      news.setProperty(SyncUtils.GOOGLE_MARKED_READ, true);
-      news.removeProperty(SyncUtils.GOOGLE_MARKED_UNREAD);
+      news.setProperty(markedRead, true);
+      news.removeProperty(markedUnread);
     }
 
     /* Mark Unread */
     if (isMarkedUnread()) {
-      news.setProperty(SyncUtils.GOOGLE_MARKED_UNREAD, true);
-      news.removeProperty(SyncUtils.GOOGLE_MARKED_READ);
+      news.setProperty(markedUnread, true);
+      news.removeProperty(markedRead);
     }
 
     /* Set Starred */
@@ -424,8 +464,8 @@ public class SyncItem implements Serializable {
     if (isUnStarred())
       news.setFlagged(false);
 
-    /* Update Labels */
-    if (fAddedLabels != null || fRemovedLabels != null) {
+    /* Update Labels (Fever has no item labels) */
+    if (!isFever && (fAddedLabels != null || fRemovedLabels != null)) {
       Object labelsObj = news.getProperty(SyncUtils.GOOGLE_LABELS);
       if (labelsObj == null)
         labelsObj = new String[0];

@@ -142,6 +142,7 @@ public class ConnectionServiceImpl implements IConnectionService {
   @Override
   public void shutdown() {
     unregisterListeners();
+    FeverAccountCache.clear();
   }
 
   private void unregisterListeners() {

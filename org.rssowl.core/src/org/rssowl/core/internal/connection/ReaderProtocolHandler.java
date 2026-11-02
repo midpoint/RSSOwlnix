@@ -185,7 +185,10 @@ public class ReaderProtocolHandler extends DefaultProtocolHandler {
             continue;
 
           /* Check for Existing Uncommitted SyncItem */
-          SyncItem syncItem = uncommittedItems.get(item.getGuid().getValue());
+          String guid = item.getGuid().getValue();
+          SyncItem syncItem = uncommittedItems.get(SyncItem.toKey(item.getFeedLinkAsText(), guid));
+          if (syncItem == null)
+            syncItem = uncommittedItems.get(guid); //Legacy entries that are keyed by id only
           if (syncItem == null)
             continue;
 

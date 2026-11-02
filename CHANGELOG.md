@@ -1,7 +1,33 @@
 updates feed: https://xyrio.github.io/RSSOwlnix-site/updates.rss
 
-# WIP
+# 3.0.1
+- added multi-language support with a Language preference page, built-in English and Simplified Chinese translations, and external UTF-8 language packs under `language-packs/<locale>/` that override messages and plugin.xml labels without rebuilding
+- added early localization of menu, view and preference labels so external packs apply on the next start, and export language packs as directly editable UTF-8 files
+- added export of the bundled translations as editable language packs and support for additional pack roots through `-Drssowlnix.languagePacks`
+- rebuilt the Windows x86_64 installer as RSSOwlnix-3.0.1-win32.win32.x86_64-Setup.exe
+- upgraded the version to 3.0.1
+
+# 3.0.0
+- added Fever API account support (feeds, groups, articles, read/unread and saved states)
+- added Google Reader API account support (subscriptions, paged streams, read/unread, starred and label sync)
+- added editing of existing synchronization accounts, including server and credentials
+- stored Fever API keys and Google Reader auth tokens in Equinox Secure Storage; added native secure-storage fragments for Linux, macOS and Windows
+- made synchronization items account-aware so identical item IDs from different accounts no longer collide
+- added automatic full-content retrieval for empty and date/time-only articles
+- added local article extraction as a fallback when the online full-content service returns a teaser
+- added embedded video extraction and playback for pages such as Infzm/Tencent video articles
+- added a local Referer-aware image proxy for hotlink-protected images and image fallbacks for Google/Blogger images
+- constrained article images to the page width and improved extracted-article typography
+- removed inline font sizes so the user's text size setting works for 365geo, Hecaitou and similar feeds
+- made the article title and tag toolbar sticky while scrolling
+- forwarded configured keyboard shortcuts from the embedded article browser to the workbench
+- added Windows Edge (Chromium/WebView2) support with fallback to XULRunner and IE
+- added time-range selection to Mark All Read (keep the last day, 3 days, week, year or custom days unread and mark older news read), with a count of the news that will be marked and a warning when none are older
+- fixed Mark All Read time ranges to use the same date as the news table and to no longer silently do nothing when no news match
+- fixed Customize Toolbar leaving the toolbar incomplete or empty and restored the main menu and toolbar
+- added a reproducible NSIS installer script for the Windows x86_64 product
 - updated crash report email
+- upgraded the version to 3.0.0
 
 # 2.10.0-beta
 - runs with java 17,21 [#116](https://github.com/Xyrio/RSSOwlnix/issues/116)

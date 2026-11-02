@@ -28,10 +28,16 @@ import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.StructuredSelection;
+import org.eclipse.jface.window.Window;
+import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.IWorkbenchWindowActionDelegate;
+import org.rssowl.core.persist.INews;
 import org.rssowl.ui.internal.OwlUI;
+import org.rssowl.ui.internal.dialogs.MarkAllNewsReadDialog;
 import org.rssowl.ui.internal.editors.feed.FeedView;
+
+import java.util.Collection;
 
 /**
  * @author bpasero
@@ -55,8 +61,13 @@ public class MarkAllNewsReadAction extends Action implements IWorkbenchWindowAct
   @Override
   public void run() {
     FeedView activeFeedView = OwlUI.getActiveFeedView();
-    if (activeFeedView != null)
-      new MarkTypesReadAction(new StructuredSelection(activeFeedView)).run();
+    if (activeFeedView != null) {
+      Shell shell = activeFeedView.getSite() != null ? activeFeedView.getSite().getShell() : OwlUI.getActiveShell();
+      Collection<INews> news = MarkTypesReadAction.getNews(activeFeedView);
+      MarkAllNewsReadDialog dialog = new MarkAllNewsReadDialog(shell, news);
+      if (dialog.open() == Window.OK)
+        new MarkTypesReadAction(new StructuredSelection(activeFeedView), dialog.getSelectedRangeInMillis()).run();
+    }
   }
 
   /*

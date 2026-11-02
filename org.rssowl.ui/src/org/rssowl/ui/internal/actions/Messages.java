@@ -25,6 +25,7 @@
 package org.rssowl.ui.internal.actions;
 
 import org.eclipse.osgi.util.NLS;
+import org.rssowl.core.util.ExternalMessages;
 
 public class Messages extends NLS {
   private static final String BUNDLE_NAME = "org.rssowl.ui.internal.actions.messages"; //$NON-NLS-1$
@@ -97,6 +98,8 @@ public class Messages extends NLS {
   public static String NewNewsBinAction_NEW_NEWSBIN_MSG;
   public static String NewNewsBinAction_NEWSBIN;
   public static String NewTypeDropdownAction_BOOKMARK;
+  public static String NewTypeDropdownAction_FEVER_ACCOUNT;
+  public static String NewTypeDropdownAction_GREADER_ACCOUNT;
   public static String NewTypeDropdownAction_FOLDER;
   public static String NewTypeDropdownAction_LABEL_BINDING;
   public static String NewTypeDropdownAction_NEWSBIN;
@@ -126,6 +129,6 @@ public class Messages extends NLS {
 
   static {
     // initialize resource bundle
-    NLS.initializeMessages(BUNDLE_NAME, Messages.class);
+    ExternalMessages.initializeMessages(BUNDLE_NAME, Messages.class);
   }
 }

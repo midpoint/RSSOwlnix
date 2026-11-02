@@ -92,6 +92,18 @@ public class SyncUtils {
   public static final String READER_HTTP_SCHEME = "reader"; //$NON-NLS-1$
   public static final String READER_HTTPS_SCHEME = "readers"; //$NON-NLS-1$
 
+  /** Schemes to use for Fever API feeds */
+  public static final String FEVER_HTTP_SCHEME = "fever"; //$NON-NLS-1$
+  public static final String FEVER_HTTPS_SCHEME = "fevers"; //$NON-NLS-1$
+
+  /** Schemes to use for Google Reader API feeds */
+  public static final String GREADER_HTTP_SCHEME = "greader"; //$NON-NLS-1$
+  public static final String GREADER_HTTPS_SCHEME = "greaders"; //$NON-NLS-1$
+
+  /** Some special preferences a news can have after being parsed from Fever API */
+  public static final String FEVER_MARKED_UNREAD = "org.rssowl.pref.FeverMarkedUnRead"; //$NON-NLS-1$
+  public static final String FEVER_MARKED_READ = "org.rssowl.pref.FeverMarkedRead"; //$NON-NLS-1$
+
   /** Special Google Reader Feeds */
   public static final String GOOGLE_READER_ALL_ITEMS_FEED = "reader://readinglist"; //$NON-NLS-1$
   public static final String GOOGLE_READER_STARRED_FEED = "reader://starred"; //$NON-NLS-1$
@@ -340,7 +352,25 @@ public class SyncUtils {
    * <code>false</code> otherwise.
    */
   public static boolean isSynchronized(String link) {
-    return link != null && link.startsWith(READER_HTTP_SCHEME);
+    return link != null && (link.startsWith(READER_HTTP_SCHEME) || link.startsWith(FEVER_HTTP_SCHEME) || isGReader(link));
+  }
+
+  /**
+   * @param link the link to check for belonging to a Google Reader API site.
+   * @return <code>true</code> if the link points to a Google Reader API feed
+   * and <code>false</code> otherwise.
+   */
+  public static boolean isGReader(String link) {
+    return link != null && link.startsWith(GREADER_HTTP_SCHEME);
+  }
+
+  /**
+   * @param link the link to check for belonging to the Fever API.
+   * @return <code>true</code> if the link points to a Fever API feed and
+   * <code>false</code> otherwise.
+   */
+  public static boolean isFever(String link) {
+    return link != null && link.startsWith(FEVER_HTTP_SCHEME);
   }
 
   /**
@@ -349,7 +379,7 @@ public class SyncUtils {
    * <code>false</code> otherwise.
    */
   public static boolean fromGoogle(String link) {
-    return isSynchronized(link) || link.startsWith(GOOGLE_HTTP_URL_PREFIX) || link.startsWith(GOOGLE_HTTPS_URL_PREFIX);
+    return link != null && (link.startsWith(READER_HTTP_SCHEME) || link.startsWith(GOOGLE_HTTP_URL_PREFIX) || link.startsWith(GOOGLE_HTTPS_URL_PREFIX));
   }
 
   /**

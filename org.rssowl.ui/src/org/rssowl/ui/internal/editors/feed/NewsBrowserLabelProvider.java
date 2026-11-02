@@ -92,8 +92,11 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @author bpasero
@@ -118,6 +121,12 @@ public class NewsBrowserLabelProvider extends LabelProvider {
 
   /* Windows only: Mark of the Web */
   private static final String IE_MOTW = "<!-- saved from url=(0014)about:internet -->"; //$NON-NLS-1$
+
+  /* Inline style attribute of news content */
+  private static final Pattern STYLE_ATTRIBUTE_PATTERN = Pattern.compile("(?is)(style\\s*=\\s*)([\"'])(.*?)\\2"); //$NON-NLS-1$
+
+  /* Font size declarations that would override the user's text size */
+  private static final Pattern FONT_SIZE_PATTERN = Pattern.compile("(?i)\\s*font-size\\s*:[^;\"]*;?"); //$NON-NLS-1$
 
   /* Dynamic HTML in Content */
   enum Dynamic {
@@ -268,7 +277,27 @@ public class NewsBrowserLabelProvider extends LabelProvider {
     fStripMediaFromNews = stripMediaFromNews;
   }
 
-  /* Removes Media Tags from the provided String if the provider is configured to do so */
+  /* Prepare content for display, respecting user settings and text size */
+  String prepareNewsContent(String str) {
+    if (str == null)
+      return null;
+
+    /* Remove inline font sizes so that the text size setting is effective */
+    if (str.toLowerCase(Locale.ENGLISH).indexOf("font-size") >= 0) { //$NON-NLS-1$
+      Matcher matcher = STYLE_ATTRIBUTE_PATTERN.matcher(str);
+      StringBuffer result = new StringBuffer(str.length());
+      while (matcher.find()) {
+        String style = FONT_SIZE_PATTERN.matcher(matcher.group(3)).replaceAll(""); //$NON-NLS-1$
+        matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(1) + matcher.group(2) + style + matcher.group(2)));
+      }
+      matcher.appendTail(result);
+      str = result.toString();
+    }
+
+    return stripMediaTagsIfNecessary(str);
+  }
+
+  /* Strip media tags if set in the preferences */
   String stripMediaTagsIfNecessary(String str) {
     if (fStripImagesFromNews && fStripMediaFromNews)
       return StringUtils.filterTags(str, fImageAndMediaTags, false);
@@ -547,6 +576,7 @@ public class NewsBrowserLabelProvider extends LabelProvider {
     writer.append("a:hover { ").append(fLinkFGColorCSS).append(" text-decoration: underline; }\n"); //$NON-NLS-1$ //$NON-NLS-2$
     writer.append("a:visited { ").append(fLinkFGColorCSS).append(" text-decoration: none; }\n"); //$NON-NLS-1$ //$NON-NLS-2$
     writer.append("img { border: none; }\n"); //$NON-NLS-1$
+    writer.append("div.content img { max-width: 100% !important; height: auto !important; }\n"); //$NON-NLS-1$
     writer.append("div.hidden { display: none; }\n"); //$NON-NLS-1$
 
     /* Group */
@@ -564,6 +594,16 @@ public class NewsBrowserLabelProvider extends LabelProvider {
 
     /* Restrict the style of embedded Paragraphs */
     writer.write("div.content p { margin-top: 0 !important; padding-top: 0 !important; margin-left: 0 !important; padding-left: 0 !important; }\n"); //$NON-NLS-1$
+
+    /* Comfortable layout for locally extracted article content */
+    writer.write("div.content .rssowl-article { line-height: 1.7; }\n"); //$NON-NLS-1$
+    writer.write("div.content .rssowl-article p { margin: 0 0 1em 0 !important; padding: 0 !important; }\n"); //$NON-NLS-1$
+    writer.write("div.content .rssowl-article img { display: block; margin: 1em auto; max-width: 100% !important; height: auto !important; }\n"); //$NON-NLS-1$
+    writer.write("div.content .rssowl-article .separator { text-align: center; margin: 1em 0; }\n"); //$NON-NLS-1$
+    writer.write("div.content .rssowl-article h1, div.content .rssowl-article h2, div.content .rssowl-article h3 { line-height: 1.4; margin: 1.2em 0 0.6em 0; }\n"); //$NON-NLS-1$
+    writer.write("div.content .rssowl-article blockquote { margin: 1em 0; padding: 0 1em; border-left: 3px solid #ccc; color: #555; }\n"); //$NON-NLS-1$
+    writer.write("div.content .rssowl-video { margin: 1em 0; text-align: center; }\n"); //$NON-NLS-1$
+    writer.write("div.content video, div.content audio, div.content iframe { max-width: 100%; }\n"); //$NON-NLS-1$
 
     /* Title */
     if (!withInternalLinks)
@@ -696,6 +736,9 @@ public class NewsBrowserLabelProvider extends LabelProvider {
     /* Header */
     writer.append("      div.header { padding: 10px 10px 5px 10px; background-color: rgb(242,242,242); }\n"); //$NON-NLS-1$
     writer.append("div.headerSticky { padding: 10px 10px 5px 10px; ").append(fStickyBGColorCSS).append(" }\n"); //$NON-NLS-1$ //$NON-NLS-2$
+
+    /* Keep the title and its toolbar visible while the article content scrolls */
+    writer.append("div.header, div.headerSticky { position: -webkit-sticky; position: sticky; top: 0; z-index: 20; }\n"); //$NON-NLS-1$
 
     writer.write("       div.footer { padding: 3px 5px 3px 5px; line-height: 20px; border-top: dotted 1px silver; border-bottom: dotted 1px silver; clear: both; background-color: rgb(248,248,248); }\n"); //$NON-NLS-1$
     writer.append("div.footerSticky { padding: 3px 5px 3px 5px; line-height: 20px; border-top: dotted 1px silver; border-bottom: dotted 1px silver; clear: both; ").append(fStickyBGColorCSS).append("}\n"); //$NON-NLS-1$ //$NON-NLS-2$
@@ -841,7 +884,7 @@ public class NewsBrowserLabelProvider extends LabelProvider {
 
     String description = null; //Fetch description lazily if only headlines shown or news hidden
     if (!fHeadlinesOnly && isVisible)
-      description = stripMediaTagsIfNecessary(news.getDescription());
+      description = prepareNewsContent(news.getDescription());
 
     StringBuilder builder = getBuilder(news, description);
 

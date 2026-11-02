@@ -1226,10 +1226,10 @@ public class News extends AbstractEntity implements INews {
 
   private State getState(INews news) {
     if (isVisible() && SyncUtils.isSynchronized(news)) { //Avoid marking a deleted news as visible from a sync merge
-      if (news.getProperty(SyncUtils.GOOGLE_MARKED_READ) != null)
+      if (news.getProperty(SyncUtils.GOOGLE_MARKED_READ) != null || news.getProperty(SyncUtils.FEVER_MARKED_READ) != null)
         return State.READ;
 
-      if (news.getProperty(SyncUtils.GOOGLE_MARKED_UNREAD) != null)
+      if (news.getProperty(SyncUtils.GOOGLE_MARKED_UNREAD) != null || news.getProperty(SyncUtils.FEVER_MARKED_UNREAD) != null)
         return State.UNREAD;
     }
 

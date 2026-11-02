@@ -2,13 +2,16 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: %Bundle-Name
 Bundle-SymbolicName: org.rssowl.ui; singleton:=true
-Bundle-Version: 2.10.0.qualifier
+Bundle-Version: 3.0.1.qualifier
 Bundle-Activator: org.rssowl.ui.internal.Activator
 Bundle-Vendor: %Bundle-Vendor
 Require-Bundle: org.rssowl.core,
  org.eclipse.core.runtime,
  org.eclipse.core.jobs,
  org.eclipse.ui
+Import-Package: javax.swing.text,
+ javax.swing.text.html,
+ javax.swing.text.html.parser
 Bundle-ActivationPolicy: lazy
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Bundle-ClassPath: .

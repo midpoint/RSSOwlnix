@@ -50,6 +50,24 @@
                style="push">
          </action>
          <action
+               class="org.rssowl.ui.internal.actions.NewFeverAccountAction"
+               definitionId="org.rssowl.ui.actions.NewFeverAccount"
+               icon="icons/obj16/bookmark.gif"
+               id="org.rssowl.ui.actions.NewFeverAccount"
+               label="%action.label.41"
+               menubarPath="file/new_sub/fever"
+               style="push">
+         </action>
+         <action
+               class="org.rssowl.ui.internal.actions.NewGReaderAccountAction"
+               definitionId="org.rssowl.ui.actions.NewGReaderAccount"
+               icon="icons/obj16/bookmark.gif"
+               id="org.rssowl.ui.actions.NewGReaderAccount"
+               label="%action.label.42"
+               menubarPath="file/new_sub/greader"
+               style="push">
+         </action>
+         <action
                class="org.rssowl.ui.internal.actions.NewNewsBinAction"
                definitionId="org.rssowl.ui.actions.NewNewsBin"
                icon="icons/obj16/newsbin.gif"
@@ -100,6 +118,9 @@
                path="file/new.ext">
             <groupMarker
                   name="bookmark" />
+            <groupMarker
+                  name="fever">
+            </groupMarker>
             <groupMarker
                   name="newsbin">
             </groupMarker>
@@ -465,6 +486,14 @@
                id="org.rssowl.ui.preferences.keywords.Sharing">
          </keywordReference>
       </page>
+      <page
+            class="org.rssowl.ui.internal.dialogs.preferences.LanguagePreferencePage"
+            id="org.rssowl.ui.LanguagePreferences"
+            name="%page.name.9">
+         <keywordReference
+               id="org.rssowl.ui.preferences.keywords.Language">
+         </keywordReference>
+      </page>
    </extension>
    <extension
          point="org.eclipse.ui.keywords">
@@ -504,6 +533,10 @@
       <keyword
             id="org.rssowl.ui.preferences.keywords.Sharing"
             label="%keyword.label.8">
+      </keyword>
+      <keyword
+            id="org.rssowl.ui.preferences.keywords.Language"
+            label="%keyword.label.9">
       </keyword>
    </extension>
    <extension
@@ -556,6 +589,18 @@
             description="%command.description.4"
             id="org.rssowl.ui.actions.NewBookMark"
             name="%command.name.7">
+      </command>
+      <command
+            categoryId="org.rssowl.ui.commands.category.RSSOwl"
+            description="%command.description.40"
+            id="org.rssowl.ui.actions.NewFeverAccount"
+            name="%command.name.61">
+      </command>
+      <command
+            categoryId="org.rssowl.ui.commands.category.RSSOwl"
+            description="%command.description.41"
+            id="org.rssowl.ui.actions.NewGReaderAccount"
+            name="%command.name.62">
       </command>
       <command
             categoryId="org.rssowl.ui.commands.category.RSSOwl"
@@ -889,10 +934,14 @@
                value="icons/product/16x16.png,icons/product/32x32.png,icons/product/48x48.png,icons/product/64x64.png,icons/product/128x128.png,icons/product/256x256.png"/>
          <property
                name="aboutText"
-               value="RSSOwlnix fork of RSSOwl&#x0A;&#x0A;Version: 2.10.0-beta&#x0A;Build Id: 2025-07-15&#x0A;&#x0A;RSSOwlnix and RSSOwl is licensed under the terms of the Eclipse Public License version 1.0.&#x0A;http://www.rssowl.org/legal/epl-v10.html&#x0A;&#x0A;(c) Copyright RSSOwl contributors and others 2005-2011.  All rights reserved."/>
+               value="RSSOwlnix fork of RSSOwl&#x0A;&#x0A;Version: 3.0.1&#x0A;Build Id: 2026-11-02&#x0A;&#x0A;RSSOwlnix and RSSOwl is licensed under the terms of the Eclipse Public License version 1.0.&#x0A;http://www.rssowl.org/legal/epl-v10.html&#x0A;&#x0A;(c) Copyright RSSOwl contributors and others 2005-2011.  All rights reserved."/>
          <property
                name="appName"
                value="%product.name">
+         </property>
+         <property
+               name="preferenceCustomization"
+               value="preferences.ini">
          </property>
       </product>
    </extension>
@@ -1350,6 +1399,30 @@
                </objectClass>
                <objectClass
                      name="org.rssowl.core.persist.IBookMark">
+               </objectClass>
+            </or>
+         </visibility>
+      </objectContribution>
+      <objectContribution
+            adaptable="false"
+            id="org.rssowl.ui.EditSyncAccountContribution"
+            objectClass="java.lang.Object">
+         <action
+               class="org.rssowl.ui.internal.actions.EditSyncAccountAction"
+               enablesFor="1"
+               id="org.rssowl.ui.actions.EditSyncAccount"
+               label="%action.label.43"
+               menubarPath="properties"
+               style="push"
+               tooltip="%action.tooltip.8">
+         </action>
+         <visibility>
+            <or>
+               <objectClass
+                     name="org.rssowl.core.persist.IBookMark">
+               </objectClass>
+               <objectClass
+                     name="org.rssowl.core.persist.IFolder">
                </objectClass>
             </or>
          </visibility>

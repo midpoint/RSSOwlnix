@@ -82,6 +82,9 @@ public class CBrowser {
   /* Delay before a URL is set in a Mozilla Browser (guess) */
   private static final int MOZILLA_BROWSER_URL_DELAY = 2000;
 
+  /* Delay before a URL is set in an Edge Browser (guess) */
+  private static final int EDGE_BROWSER_URL_DELAY = 2000;
+
   /* JavaScript: print() Method */
   private static final String JAVA_SCRIPT_PRINT = "window.print();"; //$NON-NLS-1$
 
@@ -92,11 +95,17 @@ public class CBrowser {
   /* System Property to force disable XULRunner even if registered */
   private static final String DISABLE_XULRUNNER = "noXulrunner"; //$NON-NLS-1$
 
+  /* System Property to force disable the Edge Browser */
+  private static final String DISABLE_EDGE = "noEdge"; //$NON-NLS-1$
+
   /* Delay in millies after a refresh until to allow ext. navigation again (see Bug 1429) */
   private static final long REFRESH_NAVIGATION_DELAY = 3000;
 
   /* Mac only: Delay in millies after a URL change until to allow ext. navigation again (see Bug 1350) */
   private static final long URL_CHANGE_NAVIGATION_DELAY = 1000;
+
+  /* Flag to check if the Edge Browser is available on Windows */
+  private static boolean fgEdgeAvailable = true;
 
   /* Flag to check if Mozilla is available on Windows */
   private static boolean fgMozillaAvailable = true;
@@ -128,8 +137,10 @@ public class CBrowser {
   private static final int MAX_FAILING_JS_LOG_LENGTH = 500;
 
   private Browser fBrowser;
+  private String fBrowserType;
   private boolean fAllowExternalNavigation;
   private boolean fDisableXulrunner;
+  private boolean fDisableEdge;
   private boolean fCanOpenLinksInTabs;
   private long fLastRefresh;
   private long fLastUrlChange;
@@ -146,8 +157,10 @@ public class CBrowser {
     fPreferences = Owl.getPreferenceService().getGlobalScope();
     fEclipsePreferences = Owl.getPreferenceService().getEclipseScope();
     fDisableXulrunner = System.getProperty(DISABLE_XULRUNNER) != null;
+    fDisableEdge = System.getProperty(DISABLE_EDGE) != null;
     try {
       fBrowser = createBrowser(parent, style);
+      fBrowserType = fBrowser.getBrowserType();
     } catch (SWTError e) {
       MessageBox box = new MessageBox(parent.getShell(), SWT.ICON_ERROR | SWT.OK | SWT.CANCEL);
       box.setText(Messages.CBrowser_ERROR_CREATE_BROWSER);
@@ -167,6 +180,10 @@ public class CBrowser {
 
   private boolean useMozillaOnWindows() {
     return Application.IS_WINDOWS && fgMozillaAvailable && !fDisableXulrunner;
+  }
+
+  private boolean useEdgeOnWindows() {
+    return Application.IS_WINDOWS && fgEdgeAvailable && !fDisableEdge;
   }
 
   /**
@@ -202,8 +219,26 @@ public class CBrowser {
       }
     }
 
+    /* Try Edge (Chromium) over IE on Windows */
+    if (useEdgeOnWindows()) {
+      try {
+        Browser edgeBrowser = new Browser(parent, style | SWT.EDGE);
+        if ("edge".equals(edgeBrowser.getBrowserType())) { //$NON-NLS-1$
+          browser = edgeBrowser;
+        } else {
+          fgEdgeAvailable = false;
+          edgeBrowser.dispose();
+        }
+      } catch (SWTError e) {
+        fgEdgeAvailable = false;
+
+        /* The WebView2 runtime is optional on some Windows versions */
+        Activator.getDefault().getLog().log(Activator.getDefault().createInfoStatus(e.getMessage(), null));
+      }
+    }
+
     /* Try Mozilla over IE on Windows */
-    if (useMozillaOnWindows()) {
+    if (browser == null && useMozillaOnWindows()) {
       try {
         browser = new Browser(parent, style | SWT.MOZILLA);
         fgMozillaRunningOnWindows = true;
@@ -215,7 +250,7 @@ public class CBrowser {
       }
     }
 
-    /* Any other OS, or Mozilla unavailable, use default */
+    /* Any other OS, or Edge and Mozilla unavailable, use default */
     if (browser == null)
       browser = new Browser(parent, style);
 
@@ -530,14 +565,17 @@ public class CBrowser {
       public void open(WindowEvent event) {
 
         /* Special handle external Browser */
+        boolean useEdge = isEdge();
         boolean useMozilla = useMozillaOnWindows();
+        int tempBrowserStyle = useEdge ? SWT.EDGE : (useMozilla ? SWT.MOZILLA : SWT.NONE);
+        int tempBrowserUrlDelay = useEdge ? EDGE_BROWSER_URL_DELAY : (useMozilla ? MOZILLA_BROWSER_URL_DELAY : IE_BROWSER_URL_DELAY);
         if (OwlUI.useExternalBrowser()) {
 
           /* Avoid IE being loaded from SWT on Windows */
-          final Browser tempBrowser = new Browser(fBrowser.getShell(), useMozilla ? SWT.MOZILLA : SWT.NONE);
+          final Browser tempBrowser = new Browser(fBrowser.getShell(), tempBrowserStyle);
           tempBrowser.setVisible(false);
           event.browser = tempBrowser;
-          tempBrowser.getDisplay().timerExec(useMozilla ? MOZILLA_BROWSER_URL_DELAY : IE_BROWSER_URL_DELAY, new Runnable() {
+          tempBrowser.getDisplay().timerExec(tempBrowserUrlDelay, new Runnable() {
             @Override
             public void run() {
               if (!tempBrowser.isDisposed() && PlatformUI.isWorkbenchRunning()) {
@@ -561,10 +599,10 @@ public class CBrowser {
 
         /* Open internal Browser in same Browser */
         else {
-          final Browser tempBrowser = new Browser(fBrowser.getShell(), useMozilla ? SWT.MOZILLA : SWT.NONE);
+          final Browser tempBrowser = new Browser(fBrowser.getShell(), tempBrowserStyle);
           tempBrowser.setVisible(false);
           event.browser = tempBrowser;
-          tempBrowser.getDisplay().timerExec(useMozilla ? MOZILLA_BROWSER_URL_DELAY : IE_BROWSER_URL_DELAY, new Runnable() {
+          tempBrowser.getDisplay().timerExec(tempBrowserUrlDelay, new Runnable() {
             @Override
             public void run() {
               if (!tempBrowser.isDisposed() && PlatformUI.isWorkbenchRunning()) {
@@ -585,7 +623,11 @@ public class CBrowser {
    * otherwise.
    */
   public boolean isIE() {
-    return Application.IS_WINDOWS && !fBrowser.isDisposed() && (fBrowser.getStyle() & SWT.MOZILLA) == 0;
+    return Application.IS_WINDOWS && !fBrowser.isDisposed() && "ie".equals(fBrowserType); //$NON-NLS-1$
+  }
+
+  private boolean isEdge() {
+    return Application.IS_WINDOWS && !fBrowser.isDisposed() && "edge".equals(fBrowserType); //$NON-NLS-1$
   }
 
   /**
@@ -603,8 +645,8 @@ public class CBrowser {
    */
   public void setScriptDisabled(Boolean disabled) {
 
-    /* Not Supported on Windows XULRunner */
-    if (isMozillaRunningOnWindows())
+    /* Not Supported on Windows XULRunner and Edge */
+    if (isMozillaRunningOnWindows() || isEdge())
       return;
 
     /* Windows */

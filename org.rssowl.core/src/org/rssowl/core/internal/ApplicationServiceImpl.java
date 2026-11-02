@@ -284,15 +284,17 @@ public class ApplicationServiceImpl implements IApplicationService {
         for (INews item : newNewsAdded) {
 
           /* News Marked Read */
-          if (item.getProperty(SyncUtils.GOOGLE_MARKED_READ) != null) {
+          if (item.getProperty(SyncUtils.GOOGLE_MARKED_READ) != null || item.getProperty(SyncUtils.FEVER_MARKED_READ) != null) {
             item.setState(INews.State.READ);
             item.removeProperty(SyncUtils.GOOGLE_MARKED_READ);
+            item.removeProperty(SyncUtils.FEVER_MARKED_READ);
           }
 
           /* News Marked Unread */
-          else if (item.getProperty(SyncUtils.GOOGLE_MARKED_UNREAD) != null) {
+          else if (item.getProperty(SyncUtils.GOOGLE_MARKED_UNREAD) != null || item.getProperty(SyncUtils.FEVER_MARKED_UNREAD) != null) {
             item.setState(INews.State.UNREAD);
             item.removeProperty(SyncUtils.GOOGLE_MARKED_UNREAD);
+            item.removeProperty(SyncUtils.FEVER_MARKED_UNREAD);
           }
         }
       }

@@ -2,7 +2,7 @@
 <feature
       id="org.rssowl.dependencies"
       label="RSSOwlnix Dependencies"
-      version="2.10.0.qualifier"
+      version="3.0.1.qualifier"
       provider-name="https://github.com/Xyrio/RSSOwlnix">
 
    <description>
@@ -263,6 +263,39 @@ litigation.
          download-size="0"
          install-size="0"
          version="0.0.0"
+         unpack="false"/>
+
+   <plugin
+         id="org.eclipse.equinox.security.linux"
+         download-size="0"
+         install-size="0"
+         version="0.0.0"
+         fragment="true"
+         os="linux"
+         ws="gtk"
+         arch="x86_64"
+         unpack="false"/>
+
+   <plugin
+         id="org.eclipse.equinox.security.macosx"
+         download-size="0"
+         install-size="0"
+         version="0.0.0"
+         fragment="true"
+         os="macosx"
+         ws="cocoa"
+         arch="x86_64"
+         unpack="false"/>
+
+   <plugin
+         id="org.eclipse.equinox.security.win32.x86_64"
+         download-size="0"
+         install-size="0"
+         version="0.0.0"
+         fragment="true"
+         os="win32"
+         ws="win32"
+         arch="x86_64"
          unpack="false"/>
 
    <plugin

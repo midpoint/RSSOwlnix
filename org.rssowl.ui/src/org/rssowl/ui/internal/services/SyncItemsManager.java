@@ -85,11 +85,26 @@ public class SyncItemsManager {
   public void addUncommitted(Collection<SyncItem> items) {
     synchronized (fLock) {
       for (SyncItem item : items) {
-        SyncItem existingItem = fItems.get(item.getId());
-        if (existingItem != null)
+        String existingKey = item.getKey();
+        SyncItem existingItem = fItems.get(existingKey);
+
+        /* Fallback to legacy entries that are keyed by id only */
+        if (existingItem == null && item.getFeedLink() != null) {
+          existingKey = item.getId();
+          existingItem = fItems.get(existingKey);
+        }
+
+        if (existingItem != null) {
           existingItem.merge(item);
-        else
-          fItems.put(item.getId(), item);
+
+          /* Migrate legacy entry to the account aware key */
+          String mergedKey = existingItem.getKey();
+          if (!mergedKey.equals(existingKey)) {
+            fItems.remove(existingKey);
+            fItems.put(mergedKey, existingItem);
+          }
+        } else
+          fItems.put(item.getKey(), item);
       }
     }
   }
@@ -130,7 +145,9 @@ public class SyncItemsManager {
   public void removeUncommitted(Collection<SyncItem> items) {
     synchronized (fLock) {
       for (SyncItem item : items) {
-        fItems.remove(item.getId());
+        fItems.remove(item.getKey());
+        if (item.getFeedLink() != null)
+          fItems.remove(item.getId()); //Legacy entry
       }
     }
   }
@@ -140,7 +157,9 @@ public class SyncItemsManager {
    */
   public void removeUncommitted(SyncItem item) {
     synchronized (fLock) {
-      fItems.remove(item.getId());
+      fItems.remove(item.getKey());
+      if (item.getFeedLink() != null)
+        fItems.remove(item.getId()); //Legacy entry
     }
   }
 

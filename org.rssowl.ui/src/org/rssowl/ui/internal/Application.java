@@ -42,6 +42,7 @@ import org.rssowl.core.persist.IBookMark;
 import org.rssowl.core.persist.dao.IBookMarkDAO;
 import org.rssowl.core.persist.dao.OwlDAO;
 import org.rssowl.core.persist.reference.FeedLinkReference;
+import org.rssowl.core.util.LanguageManager;
 import org.rssowl.core.util.StringUtils;
 import org.rssowl.core.util.URIUtils;
 import org.rssowl.ui.internal.actions.NewBookMarkAction;
@@ -51,6 +52,7 @@ import org.rssowl.ui.internal.util.JobRunner;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collection;
+import java.util.Locale;
 
 /**
  * This class controls all aspects of the application's execution
@@ -78,6 +80,9 @@ public class Application implements IApplication {
    */
   @Override
   public Object start(IApplicationContext context) throws Exception {
+
+    /* Use the language selected in the preferences for formatting as well */
+    Locale.setDefault(LanguageManager.getLocale());
 
     /* Set Handshake-Handler to Application Server */
     ApplicationServer server = ApplicationServer.getDefault();

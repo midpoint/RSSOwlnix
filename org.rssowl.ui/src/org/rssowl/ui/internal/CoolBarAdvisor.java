@@ -65,6 +65,7 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.actions.ActionFactory;
 import org.eclipse.ui.actions.ActionFactory.IWorkbenchAction;
 import org.eclipse.ui.actions.ContributionItemFactory;
+import org.eclipse.ui.handlers.IHandlerService;
 import org.eclipse.ui.keys.IBindingService;
 import org.rssowl.core.Owl;
 import org.rssowl.core.internal.persist.pref.DefaultPreferences;
@@ -128,6 +129,9 @@ public class CoolBarAdvisor {
 
   /* ID of a Separator */
   private static final String SPACER_ID = "org.rssowl.ui.CoolBarSpacer"; //$NON-NLS-1$
+
+  /* Prefix of the unique ID for each Toolbar Group */
+  private static final String TOOLBAR_ID_PREFIX = "org.rssowl.ui.CoolBarGroup"; //$NON-NLS-1$
 
   private final IWorkbenchWindow fWindow;
   private final ICoolBarManager fManager;
@@ -586,16 +590,15 @@ public class CoolBarAdvisor {
       barControl.getShell().setRedraw(false);
 
     try {
-      {
-        /* First Remove All */
-        IContributionItem[] items = fManager.getItems();
-        for (IContributionItem item : items)
-          if (!IWorkbenchActionConstants.MB_ADDITIONS.equals(item.getId()))
-            try {
-              fManager.remove(item);
-            } catch (Exception e) {
-              new RuntimeException("id=" + item.getId(), e).printStackTrace(); //$NON-NLS-1$
-            }
+      /* First Remove All */
+      IContributionItem[] contributionItems = fManager.getItems();
+      for (IContributionItem item : contributionItems) {
+        if (!IWorkbenchActionConstants.MB_ADDITIONS.equals(item.getId()))
+          try {
+            fManager.remove(item);
+          } catch (Exception e) {
+            new RuntimeException("id=" + item.getId(), e).printStackTrace(); //$NON-NLS-1$
+          }
       }
 
       /* Load Toolbar Mode */
@@ -611,6 +614,7 @@ public class CoolBarAdvisor {
 
       fManager.setLockLayout(false);
       ToolBarManager currentToolBar = new ToolBarManager(styleSWT);
+      int toolBarIndex = 0;
 
       for (int id : items) {
         final CoolBarItem item = CoolBarItem.values()[id];
@@ -618,7 +622,14 @@ public class CoolBarAdvisor {
 
           /* Separator: Start a new Toolbar */
           if (item == CoolBarItem.SEPARATOR) {
-            fManager.add(new ToolBarContributionItem(currentToolBar));
+
+            /*
+             * Each group needs a unique ID. The E4 CoolBarToTrimManager looks
+             * up toolbars by ID and with a null ID would reuse the first
+             * toolbar instead of creating one per group.
+             */
+            String toolBarId = TOOLBAR_ID_PREFIX + toolBarIndex++;
+            fManager.add(new ToolBarContributionItem(currentToolBar, toolBarId));
             currentToolBar = new ToolBarManager(styleSWT);
           }
 
@@ -647,13 +658,15 @@ public class CoolBarAdvisor {
       }
 
       /* Add latest Toolbar Manager to Coolbar too */
-      fManager.add(new ToolBarContributionItem(currentToolBar));
+      String toolBarId = TOOLBAR_ID_PREFIX + toolBarIndex;
+      fManager.add(new ToolBarContributionItem(currentToolBar, toolBarId));
 
       /* Ensure Updates are properly Propagated */
       if (fromUpdate) {
 
         /* Update Overall Coolbar UI */
         fManager.update(true);
+        refreshToolBars();
         if (barControl != null) {
           boolean isLocked = barControl.getLocked();
           barControl.setLocked(!isLocked);
@@ -667,6 +680,29 @@ public class CoolBarAdvisor {
       if (barControl != null && fromUpdate)
         barControl.getShell().setRedraw(true);
     }
+  }
+
+  /*
+   * Force the E4 renderer to recreate the toolbar widgets after the
+   * contributions have been replaced. Without this, toolbars added after the
+   * workbench has been rendered are not shown (see Eclipse issue #1296).
+   * Running the lock command twice toggles the lock state and back, which is
+   * the same operation the workbench performs for its toolbar context menu.
+   */
+  private void refreshToolBars() {
+    IHandlerService handlerService = fWindow.getService(IHandlerService.class);
+    if (handlerService != null) {
+      try {
+        String lockCommandId = ActionFactory.LOCK_TOOL_BAR.getCommandId();
+        handlerService.executeCommand(lockCommandId, null);
+        handlerService.executeCommand(lockCommandId, null);
+      } catch (Exception e) {
+        /* Ignore, the toolbar contributions have still been updated */
+      }
+    }
+
+    if (fWindow.getShell() != null && !fWindow.getShell().isDisposed())
+      fWindow.getShell().layout(true, true);
   }
 
   private Action getAction(final CoolBarItem item, final CoolBarMode mode, final ToolBarManager manager) {

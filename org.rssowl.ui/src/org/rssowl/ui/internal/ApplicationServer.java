@@ -55,13 +55,18 @@ import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.BindException;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URL;
+import java.net.URLDecoder;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -72,6 +77,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * The <code>NewsServer</code> is a Singleton that serves HTML for a request of
@@ -135,6 +143,11 @@ public class ApplicationServer {
   private static final String OP_DISPLAY_SEARCHMARK = "displaySearchMark="; //$NON-NLS-1$
   private static final String OP_DISPLAY_NEWS = "displayNews="; //$NON-NLS-1$
   private static final String OP_RESOURCE = "resource="; //$NON-NLS-1$
+  private static final String OP_IMAGE_PROXY = "imageProxy="; //$NON-NLS-1$
+  private static final String OP_IMAGE_REFERER = "&referer="; //$NON-NLS-1$
+
+  /* Maximum size of an image fetched through the local proxy */
+  private static final int MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 
   /* Windows only: Mark of the Web */
   private static final String IE_MOTW = "<!-- saved from url=(0014)about:internet -->"; //$NON-NLS-1$
@@ -158,6 +171,7 @@ public class ApplicationServer {
   private Job fServerJob;
   private int fPort;
   private HandshakeHandler fHandshakeHandler;
+  private ExecutorService fImageProxyExecutor;
 
   /**
    * Returns the singleton instance of the ApplicationServer.
@@ -207,6 +221,8 @@ public class ApplicationServer {
   /** Stop the Application Server */
   public void shutdown() {
     fServerJob.cancel();
+    if (fImageProxyExecutor != null)
+      fImageProxyExecutor.shutdownNow();
     try {
       if (fSocket != null)
         fSocket.close();
@@ -424,6 +440,16 @@ public class ApplicationServer {
 
   private void listen() {
 
+    /* Image proxy requests can block on remote servers, so handle them in parallel */
+    fImageProxyExecutor = Executors.newFixedThreadPool(4, new ThreadFactory() {
+      @Override
+      public Thread newThread(Runnable runnable) {
+        Thread thread = new Thread(runnable, "RSSOwl Image Proxy"); //$NON-NLS-1$
+        thread.setDaemon(true);
+        return thread;
+      }
+    });
+
     /* Create a Job to listen for Requests */
     fServerJob = new Job("Local News Viewer Server") { //$NON-NLS-1$
       @Override
@@ -443,8 +469,37 @@ public class ApplicationServer {
             String message = buffReader.readLine();
 
             /* Process Message */
-            if (StringUtils.isSet(message))
-              safeProcess(socket, message);
+            if (StringUtils.isSet(message)) {
+              if (isImageProxyOperation(message)) {
+                final BufferedReader imageReader = buffReader;
+                final Socket imageSocket = socket;
+                final String imageMessage = message;
+                fImageProxyExecutor.execute(new Runnable() {
+                  @Override
+                  public void run() {
+                    try {
+                      safeProcess(imageSocket, imageMessage);
+                    } finally {
+                      try {
+                        imageReader.close();
+                      } catch (Exception e) {
+                        /* Ignore */
+                      }
+                      try {
+                        imageSocket.close();
+                      } catch (Exception e) {
+                        /* Ignore */
+                      }
+                    }
+                  }
+                });
+
+                /* The worker is responsible for closing the reader and socket */
+                buffReader = null;
+                socket = null;
+              } else
+                safeProcess(socket, message);
+            }
           } catch (IOException e) {
             /* Ignore */
           }
@@ -480,15 +535,20 @@ public class ApplicationServer {
 
   /* Process Message in Safe-Runnable */
   private void safeProcess(final Socket socket, final String message) {
-    final boolean isDisplayOperation = isDisplayOperation(message);
-    final boolean isResourceOperation = !isDisplayOperation && isResourceOperation(message);
+    final boolean isImageProxyOperation = isImageProxyOperation(message);
+    final boolean isDisplayOperation = !isImageProxyOperation && isDisplayOperation(message);
+    final boolean isResourceOperation = !isImageProxyOperation && !isDisplayOperation && isResourceOperation(message);
 
     LoggingSafeRunnable runnable = new LoggingSafeRunnable() {
       @Override
       public void run() throws Exception {
 
+        /* This is an image proxy operation */
+        if (isImageProxyOperation)
+          processImageProxyOperation(socket, message);
+
         /* This is a Display-Operation */
-        if (isDisplayOperation)
+        else if (isDisplayOperation)
           processDisplayOperation(socket, message);
 
         /* This is a Resource-Operation */
@@ -506,7 +566,7 @@ public class ApplicationServer {
      * where Equinox will terminate classloading after 5000 ms to avoid it. This happens when
      * two instances of RSSOwl start at the same time, e.g. when clicking the icon twice.
      */
-    if (!isDisplayOperation && !isResourceOperation) {
+    if (!isDisplayOperation && !isResourceOperation && !isImageProxyOperation) {
       try {
         runnable.run();
       } catch (Exception e) {
@@ -514,6 +574,117 @@ public class ApplicationServer {
       }
     } else
       SafeRunner.run(runnable);
+  }
+
+  /* Check whether the given URL requests an image through the local proxy */
+  private boolean isImageProxyOperation(String url) {
+    if (!StringUtils.isSet(url))
+      return false;
+
+    return url.contains(OP_IMAGE_PROXY);
+  }
+
+  /*
+   * Fetch an image on behalf of the embedded browser. The browser document is
+   * served from localhost, so image servers with hotlink protection reject the
+   * request. This proxy forwards the article URL as Referer to make such images
+   * load.
+   */
+  private void processImageProxyOperation(Socket socket, String message) {
+    BufferedOutputStream outS = null;
+    HttpURLConnection connection = null;
+    boolean headersWritten = false;
+    try {
+      int start = message.indexOf(OP_IMAGE_PROXY) + OP_IMAGE_PROXY.length();
+      int end = message.indexOf(' ', start);
+      if (end < 0)
+        end = message.length();
+
+      String parameter = message.substring(start, end);
+      String imageUrl;
+      String referer = null;
+
+      int refererIndex = parameter.indexOf(OP_IMAGE_REFERER);
+      if (refererIndex >= 0) {
+        imageUrl = parameter.substring(0, refererIndex);
+        referer = URLDecoder.decode(parameter.substring(refererIndex + OP_IMAGE_REFERER.length()), StandardCharsets.UTF_8.name());
+      } else {
+        imageUrl = parameter;
+      }
+      imageUrl = URLDecoder.decode(imageUrl, StandardCharsets.UTF_8.name());
+
+      URL url = new URL(imageUrl);
+      String protocol = url.getProtocol();
+      if (!"http".equalsIgnoreCase(protocol) && !"https".equalsIgnoreCase(protocol)) //$NON-NLS-1$ //$NON-NLS-2$
+        throw new IOException("Unsupported protocol: " + protocol); //$NON-NLS-1$
+
+      connection = (HttpURLConnection) url.openConnection();
+      connection.setConnectTimeout(15000);
+      connection.setReadTimeout(20000);
+      connection.setInstanceFollowRedirects(true);
+      connection.setRequestProperty("User-Agent", CoreUtils.getUserAgent()); //$NON-NLS-1$
+      if (StringUtils.isSet(referer))
+        connection.setRequestProperty("Referer", referer); //$NON-NLS-1$
+
+      int responseCode = connection.getResponseCode();
+      if (responseCode < 200 || responseCode >= 300)
+        throw new IOException("Unexpected response code: " + responseCode); //$NON-NLS-1$
+
+      String contentType = connection.getContentType();
+      if (!StringUtils.isSet(contentType))
+        contentType = "application/octet-stream"; //$NON-NLS-1$
+      int contentLength = connection.getContentLength();
+
+      outS = new BufferedOutputStream(socket.getOutputStream());
+      outS.write(HTTP_CODE_200.getBytes(StandardCharsets.UTF_8));
+      outS.write(CRLF.getBytes(StandardCharsets.UTF_8));
+      outS.write(("Content-Type: " + contentType).getBytes(StandardCharsets.UTF_8)); //$NON-NLS-1$
+      outS.write(CRLF.getBytes(StandardCharsets.UTF_8));
+      if (contentLength > 0) {
+        outS.write(("Content-Length: " + contentLength).getBytes(StandardCharsets.UTF_8)); //$NON-NLS-1$
+        outS.write(CRLF.getBytes(StandardCharsets.UTF_8));
+      }
+      outS.write("Cache-Control: public, max-age=86400".getBytes(StandardCharsets.UTF_8)); //$NON-NLS-1$
+      outS.write(CRLF.getBytes(StandardCharsets.UTF_8));
+      outS.write("Connection: close".getBytes(StandardCharsets.UTF_8)); //$NON-NLS-1$
+      outS.write(CRLF.getBytes(StandardCharsets.UTF_8));
+      outS.write(CRLF.getBytes(StandardCharsets.UTF_8));
+      headersWritten = true;
+
+      InputStream inS = connection.getInputStream();
+      byte[] buffer = new byte[8192];
+      int total = 0;
+      int read;
+      while ((read = inS.read(buffer)) != -1) {
+        total += read;
+        if (total > MAX_IMAGE_BYTES)
+          break;
+        outS.write(buffer, 0, read);
+      }
+      outS.flush();
+    } catch (Exception e) {
+      if (!headersWritten) {
+        try {
+          if (outS == null)
+            outS = new BufferedOutputStream(socket.getOutputStream());
+          outS.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8)); //$NON-NLS-1$
+          outS.flush();
+        } catch (IOException ioException) {
+          /* Ignore */
+        }
+      }
+    } finally {
+      if (connection != null)
+        connection.disconnect();
+
+      if (outS != null) {
+        try {
+          outS.close();
+        } catch (IOException e) {
+          /* Ignore */
+        }
+      }
+    }
   }
 
   /* Process Handshake-Message */

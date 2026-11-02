@@ -62,6 +62,8 @@ public class NewTypeDropdownAction extends AbstractSelectionAwareBookMarkAction<
 
     fMenu = new Menu(parent);
     newMenuItem("org.rssowl.ui.actions.NewBookMark", Messages.NewTypeDropdownAction_BOOKMARK, OwlUI.BOOKMARK, new NewBookMarkAction()); //$NON-NLS-1$
+    newMenuItem("org.rssowl.ui.actions.NewFeverAccount", Messages.NewTypeDropdownAction_FEVER_ACCOUNT, OwlUI.BOOKMARK, new NewFeverAccountAction()); //$NON-NLS-1$
+    newMenuItem("org.rssowl.ui.actions.NewGReaderAccount", Messages.NewTypeDropdownAction_GREADER_ACCOUNT, OwlUI.BOOKMARK, new NewGReaderAccountAction()); //$NON-NLS-1$
     newMenuItem("org.rssowl.ui.actions.NewNewsBin", Messages.NewTypeDropdownAction_NEWSBIN, OwlUI.NEWSBIN, new NewNewsBinAction()); //$NON-NLS-1$
     newMenuItem("org.rssowl.ui.actions.NewSearchMark", Messages.NewTypeDropdownAction_SAVED_SEARCH, OwlUI.SEARCHMARK, new NewSearchMarkAction()); //$NON-NLS-1$
     newMenuItem("org.rssowl.ui.actions.NewFolder", Messages.NewTypeDropdownAction_FOLDER, OwlUI.FOLDER, new NewFolderAction()); //$NON-NLS-1$

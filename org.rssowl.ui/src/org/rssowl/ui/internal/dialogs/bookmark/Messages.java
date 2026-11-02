@@ -25,6 +25,7 @@
 package org.rssowl.ui.internal.dialogs.bookmark;
 
 import org.eclipse.osgi.util.NLS;
+import org.rssowl.core.util.ExternalMessages;
 
 public class Messages extends NLS {
   private static final String BUNDLE_NAME = "org.rssowl.ui.internal.dialogs.bookmark.messages"; //$NON-NLS-1$
@@ -43,6 +44,62 @@ public class Messages extends NLS {
   public static String FeedDefinitionPage_CREATE_KEYWORD_FEED;
   public static String FeedDefinitionPage_IMPORT_WIZARD_TIP;
   public static String FeedDefinitionPage_USE_TITLE_OF_FEED;
+  public static String FeverAccountWizard_ACCOUNT_NAME;
+  public static String FeverAccountWizard_API_KEY;
+  public static String FeverAccountWizard_CONNECTED;
+  public static String FeverAccountWizard_CONNECTING;
+  public static String FeverAccountWizard_DESCRIPTION;
+  public static String FeverAccountWizard_FAILED;
+  public static String FeverAccountWizard_FEED;
+  public static String FeverAccountWizard_GROUP;
+  public static String FeverAccountWizard_INVALID_SERVER;
+  public static String FeverAccountWizard_LOCATION;
+  public static String FeverAccountWizard_NO_FEEDS;
+  public static String FeverAccountWizard_NO_LOCATION;
+  public static String FeverAccountWizard_SERVER;
+  public static String FeverAccountWizard_TEST;
+  public static String FeverAccountWizard_TITLE;
+  public static String FeverAccountWizard_UNKNOWN_ERROR;
+  public static String FeverAccountWizard_USERNAME;
+  public static String GReaderAccountWizard_ACCOUNT_NAME;
+  public static String GReaderAccountWizard_CONNECTED;
+  public static String GReaderAccountWizard_CONNECTING;
+  public static String GReaderAccountWizard_DESCRIPTION;
+  public static String GReaderAccountWizard_FAILED;
+  public static String GReaderAccountWizard_FEED;
+  public static String GReaderAccountWizard_GROUP;
+  public static String GReaderAccountWizard_INVALID_SERVER;
+  public static String GReaderAccountWizard_LOCATION;
+  public static String GReaderAccountWizard_NO_FEEDS;
+  public static String GReaderAccountWizard_NO_LOCATION;
+  public static String GReaderAccountWizard_PASSWORD;
+  public static String GReaderAccountWizard_SERVER;
+  public static String GReaderAccountWizard_TEST;
+  public static String GReaderAccountWizard_TITLE;
+  public static String GReaderAccountWizard_UNKNOWN_ERROR;
+  public static String GReaderAccountWizard_USERNAME;
+  public static String SyncAccountDialog_API_KEY;
+  public static String SyncAccountDialog_CONNECTED;
+  public static String SyncAccountDialog_CONNECTING;
+  public static String SyncAccountDialog_DESCRIPTION;
+  public static String SyncAccountDialog_ENDPOINT_CHANGED;
+  public static String SyncAccountDialog_ENDPOINT_CHANGED_TITLE;
+  public static String SyncAccountDialog_ENTER_FEVER_KEY;
+  public static String SyncAccountDialog_ENTER_GREADER_PASSWORD;
+  public static String SyncAccountDialog_ENTER_USERNAME;
+  public static String SyncAccountDialog_FAILED;
+  public static String SyncAccountDialog_INVALID_SERVER;
+  public static String SyncAccountDialog_KEEP_FEVER;
+  public static String SyncAccountDialog_KEEP_GREADER;
+  public static String SyncAccountDialog_PASSWORD;
+  public static String SyncAccountDialog_SERVER;
+  public static String SyncAccountDialog_TEST;
+  public static String SyncAccountDialog_TITLE;
+  public static String SyncAccountDialog_UNKNOWN_ERROR;
+  public static String SyncAccountDialog_UPDATE_FAILED;
+  public static String SyncAccountDialog_USERNAME;
+  public static String SyncAccountDialog_USERNAME_NEEDS_PASSWORD;
+  public static String SyncAccountDialog_USERNAME_OPTIONAL;
   public static String KeywordSubscriptionPage_CREATE_BOOKMARK;
   public static String KeywordSubscriptionPage_N_ON_M;
   public static String KeywordSubscriptionPage_SELECT_SEARCH_ENGINE;
@@ -51,6 +108,6 @@ public class Messages extends NLS {
 
   static {
     // initialize resource bundle
-    NLS.initializeMessages(BUNDLE_NAME, Messages.class);
+    ExternalMessages.initializeMessages(BUNDLE_NAME, Messages.class);
   }
 }

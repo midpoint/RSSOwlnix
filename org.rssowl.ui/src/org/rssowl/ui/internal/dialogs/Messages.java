@@ -25,6 +25,7 @@
 package org.rssowl.ui.internal.dialogs;
 
 import org.eclipse.osgi.util.NLS;
+import org.rssowl.core.util.ExternalMessages;
 
 public class Messages extends NLS {
   private static final String BUNDLE_NAME = "org.rssowl.ui.internal.dialogs.messages"; //$NON-NLS-1$
@@ -115,6 +116,18 @@ public class Messages extends NLS {
   public static String ManageSetsDialog_SELECT_SET;
   public static String ManageSetsDialog_SET_CONTENT;
   public static String ManageSetsDialog_SETS;
+  public static String MarkAllNewsReadDialog_ALL_NEWS;
+  public static String MarkAllNewsReadDialog_CUSTOM;
+  public static String MarkAllNewsReadDialog_DAYS;
+  public static String MarkAllNewsReadDialog_INFO;
+  public static String MarkAllNewsReadDialog_LAST_3_DAYS;
+  public static String MarkAllNewsReadDialog_LAST_DAY;
+  public static String MarkAllNewsReadDialog_LAST_WEEK;
+  public static String MarkAllNewsReadDialog_LAST_YEAR;
+  public static String MarkAllNewsReadDialog_MARK_NEWS_READ;
+  public static String MarkAllNewsReadDialog_NEWS_TO_MARK_READ;
+  public static String MarkAllNewsReadDialog_NO_OLDER_NEWS;
+  public static String MarkAllNewsReadDialog_NO_UNREAD_NEWS;
   public static String MasterPasswordDialog_CONFIRM_PASSWORD;
   public static String MasterPasswordDialog_ENTER_MASTER_PASSWORD;
   public static String MasterPasswordDialog_ENTER_MASTER_PASSWORD_TITLE;
@@ -271,6 +284,6 @@ public class Messages extends NLS {
 
   static {
     // initialize resource bundle
-    NLS.initializeMessages(BUNDLE_NAME, Messages.class);
+    ExternalMessages.initializeMessages(BUNDLE_NAME, Messages.class);
   }
 }

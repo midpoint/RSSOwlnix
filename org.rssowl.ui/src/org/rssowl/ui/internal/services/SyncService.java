@@ -36,6 +36,9 @@ import org.rssowl.core.connection.IConnectionPropertyConstants;
 import org.rssowl.core.connection.ICredentials;
 import org.rssowl.core.connection.ICredentialsProvider;
 import org.rssowl.core.connection.IProtocolHandler;
+import org.rssowl.core.internal.connection.FeverAccountCache;
+import org.rssowl.core.internal.connection.FeverClient;
+import org.rssowl.core.internal.connection.GReaderClient;
 import org.rssowl.core.persist.INews;
 import org.rssowl.core.persist.ISearchFilter;
 import org.rssowl.core.persist.dao.OwlDAO;
@@ -46,6 +49,9 @@ import org.rssowl.core.persist.event.SearchFilterAdapter;
 import org.rssowl.core.util.BatchedBuffer;
 import org.rssowl.core.util.BatchedBuffer.Receiver;
 import org.rssowl.core.util.CoreUtils;
+import org.rssowl.core.util.FeverUtils;
+import org.rssowl.core.util.GReaderUtils;
+import org.rssowl.core.util.StringUtils;
 import org.rssowl.core.util.SyncItem;
 import org.rssowl.core.util.SyncUtils;
 import org.rssowl.ui.internal.Activator;
@@ -57,6 +63,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -368,6 +375,38 @@ public class SyncService implements Receiver<SyncItem> {
     if (isCanceled(monitor))
       return 0;
 
+    /* Partition items by the service they belong to */
+    List<SyncItem> googleItems = new ArrayList<>();
+    List<SyncItem> feverItems = new ArrayList<>();
+    List<SyncItem> greaderItems = new ArrayList<>();
+    for (SyncItem item : items) {
+      if (SyncUtils.isGReader(item.getFeedLink()))
+        greaderItems.add(item);
+      else if (SyncUtils.isFever(item.getFeedLink()))
+        feverItems.add(item);
+      else
+        googleItems.add(item);
+    }
+
+    int itemCount = 0;
+    if (!googleItems.isEmpty())
+      itemCount += syncGoogle(googleItems, monitor);
+
+    if (!feverItems.isEmpty())
+      itemCount += syncFever(feverItems, monitor);
+
+    if (!greaderItems.isEmpty())
+      itemCount += syncGReader(greaderItems, monitor);
+
+    return itemCount;
+  }
+
+  private int syncGoogle(Collection<SyncItem> items, IProgressMonitor monitor) throws ConnectionException {
+
+    /* Return on cancellation */
+    if (isCanceled(monitor))
+      return 0;
+
     /* Group Sync Items by Feed and Merge Duplictates */
     Map<String, Map<String, SyncItem>> mapFeedToSyncItems = groupByStream(items);
 
@@ -408,6 +447,163 @@ public class SyncService implements Receiver<SyncItem> {
         }
 
         /* Return on cancellation */
+        if (isCanceled(monitor))
+          return itemCount;
+      }
+    }
+
+    return itemCount;
+  }
+
+  private int syncFever(Collection<SyncItem> items, IProgressMonitor monitor) throws ConnectionException {
+    Map<String, List<SyncItem>> byEndpoint = new HashMap<>();
+    for (SyncItem item : items) {
+      try {
+        URI feedLink = new URI(item.getFeedLink());
+        String endpoint = FeverUtils.toEndpoint(feedLink).toASCIIString();
+        List<SyncItem> endpointItems = byEndpoint.get(endpoint);
+        if (endpointItems == null) {
+          endpointItems = new ArrayList<>();
+          byEndpoint.put(endpoint, endpointItems);
+        }
+        endpointItems.add(item);
+      } catch (URISyntaxException e) {
+        Activator.getDefault().logError(e.getMessage(), e);
+      }
+    }
+
+    int itemCount = 0;
+    FeverClient client = new FeverClient();
+    for (Entry<String, List<SyncItem>> entry : byEndpoint.entrySet()) {
+      if (isCanceled(monitor))
+        return itemCount;
+
+      URI endpoint;
+      try {
+        endpoint = new URI(entry.getKey());
+      } catch (URISyntaxException e) {
+        continue;
+      }
+
+      String apiKey = FeverUtils.getApiKey(endpoint);
+      if (!StringUtils.isSet(apiKey))
+        throw new ConnectionException(Activator.getDefault().createErrorStatus("No Fever API key is stored for " + endpoint + ".")); //$NON-NLS-1$ //$NON-NLS-2$
+
+      boolean updated = false;
+      try {
+        for (SyncItem item : entry.getValue()) {
+          if (isCanceled(monitor))
+            return itemCount;
+
+          if (item.isMarkedRead())
+            client.markItem(endpoint, apiKey, item.getId(), "read", new NullProgressMonitor()); //$NON-NLS-1$
+          else if (item.isMarkedUnread())
+            client.markItem(endpoint, apiKey, item.getId(), "unread", new NullProgressMonitor()); //$NON-NLS-1$
+
+          if (item.isStarred())
+            client.markItem(endpoint, apiKey, item.getId(), "saved", new NullProgressMonitor()); //$NON-NLS-1$
+          else if (item.isUnStarred())
+            client.markItem(endpoint, apiKey, item.getId(), "unsaved", new NullProgressMonitor()); //$NON-NLS-1$
+
+          fSyncItemsManager.removeUncommitted(item);
+          itemCount++;
+          updated = true;
+        }
+      } finally {
+        /* Do not serve the stale cache after write-back */
+        if (updated)
+          FeverAccountCache.get(endpoint, apiKey).invalidate();
+      }
+    }
+
+    return itemCount;
+  }
+
+  private int syncGReader(Collection<SyncItem> items, IProgressMonitor monitor) throws ConnectionException {
+    Map<String, List<SyncItem>> byEndpoint = new HashMap<>();
+    for (SyncItem item : items) {
+      try {
+        URI endpoint = GReaderUtils.toEndpoint(new URI(item.getFeedLink()));
+        String key = endpoint.toASCIIString();
+        List<SyncItem> endpointItems = byEndpoint.get(key);
+        if (endpointItems == null) {
+          endpointItems = new ArrayList<>();
+          byEndpoint.put(key, endpointItems);
+        }
+        endpointItems.add(item);
+      } catch (URISyntaxException e) {
+        Activator.getDefault().logError(e.getMessage(), e);
+      }
+    }
+
+    int itemCount = 0;
+    GReaderClient client = new GReaderClient();
+    for (Entry<String, List<SyncItem>> entry : byEndpoint.entrySet()) {
+      if (isCanceled(monitor))
+        return itemCount;
+
+      URI endpoint;
+      try {
+        endpoint = new URI(entry.getKey());
+      } catch (URISyntaxException e) {
+        continue;
+      }
+
+      String authToken = GReaderUtils.getAuthToken(endpoint);
+      if (!StringUtils.isSet(authToken))
+        throw new ConnectionException(Activator.getDefault().createErrorStatus("No Google Reader API token is stored for " + endpoint + ". Please create the Google Reader account again.")); //$NON-NLS-1$ //$NON-NLS-2$
+
+      /* The action token is required for all write requests */
+      String actionToken = client.fetchToken(endpoint, authToken, new NullProgressMonitor());
+
+      List<List<SyncItem>> equivalentItemLists = findEquivalents(entry.getValue());
+      for (List<SyncItem> equivalentItems : equivalentItemLists) {
+        if (equivalentItems.isEmpty())
+          continue;
+
+        List<List<SyncItem>> chunks = CoreUtils.toChunks(equivalentItems, SYNC_PAGE_SIZE);
+        for (List<SyncItem> chunk : chunks) {
+          List<String> identifiers = new ArrayList<>();
+          Set<String> tagsToAdd = new HashSet<>();
+          Set<String> tagsToRemove = new HashSet<>();
+          for (SyncItem item : chunk) {
+            identifiers.add(item.getId());
+
+            if (item.isMarkedRead()) {
+              tagsToAdd.add(SyncUtils.CATEGORY_READ);
+              tagsToRemove.add(SyncUtils.CATEGORY_UNREAD);
+            }
+
+            if (item.isMarkedUnread()) {
+              tagsToAdd.add(SyncUtils.CATEGORY_UNREAD);
+              tagsToAdd.add(SyncUtils.CATEGORY_TRACKING_UNREAD);
+              tagsToRemove.add(SyncUtils.CATEGORY_READ);
+            }
+
+            if (item.isStarred())
+              tagsToAdd.add(SyncUtils.CATEGORY_STARRED);
+
+            if (item.isUnStarred())
+              tagsToRemove.add(SyncUtils.CATEGORY_STARRED);
+
+            List<String> addedLabels = item.getAddedLabels();
+            if (addedLabels != null) {
+              for (String label : addedLabels)
+                tagsToAdd.add(SyncUtils.CATEGORY_LABEL_PREFIX + label);
+            }
+
+            List<String> removedLabels = item.getRemovedLabels();
+            if (removedLabels != null) {
+              for (String label : removedLabels)
+                tagsToRemove.add(SyncUtils.CATEGORY_LABEL_PREFIX + label);
+            }
+          }
+
+          client.editTags(endpoint, authToken, actionToken, identifiers, tagsToAdd, tagsToRemove, new NullProgressMonitor());
+          fSyncItemsManager.removeUncommitted(chunk);
+          itemCount += chunk.size();
+        }
+
         if (isCanceled(monitor))
           return itemCount;
       }

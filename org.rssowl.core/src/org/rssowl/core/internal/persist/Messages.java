@@ -25,6 +25,7 @@
 package org.rssowl.core.internal.persist;
 
 import org.eclipse.osgi.util.NLS;
+import org.rssowl.core.util.ExternalMessages;
 
 public class Messages extends NLS {
   private static final String BUNDLE_NAME = "org.rssowl.core.internal.persist.messages"; //$NON-NLS-1$
@@ -92,6 +93,6 @@ public class Messages extends NLS {
 
   static {
     // initialize resource bundle
-    NLS.initializeMessages(BUNDLE_NAME, Messages.class);
+    ExternalMessages.initializeMessages(BUNDLE_NAME, Messages.class);
   }
 }

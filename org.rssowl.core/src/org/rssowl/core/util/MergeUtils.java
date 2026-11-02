@@ -48,7 +48,7 @@ import java.util.Set;
 public class MergeUtils {
 
   /* Set of Properties to ignore during merge */
-  private static final Set<String> EXCLUDE_PROPERTIES = new HashSet<String>(Arrays.asList(SyncUtils.GOOGLE_MARKED_READ, SyncUtils.GOOGLE_MARKED_UNREAD, SyncUtils.GOOGLE_LABELS));
+  private static final Set<String> EXCLUDE_PROPERTIES = new HashSet<String>(Arrays.asList(SyncUtils.GOOGLE_MARKED_READ, SyncUtils.GOOGLE_MARKED_UNREAD, SyncUtils.GOOGLE_LABELS, SyncUtils.FEVER_MARKED_READ, SyncUtils.FEVER_MARKED_UNREAD));
 
   /**
    * Helper method that simply does:

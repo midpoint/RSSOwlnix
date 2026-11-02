@@ -46,6 +46,7 @@ import org.rssowl.core.persist.dao.OwlDAO;
 import org.rssowl.core.persist.pref.IPreferenceScope;
 import org.rssowl.core.persist.reference.NewsReference;
 import org.rssowl.core.util.CoreUtils;
+import org.rssowl.core.util.DateUtils;
 import org.rssowl.core.util.RetentionStrategy;
 import org.rssowl.ui.internal.Controller;
 import org.rssowl.ui.internal.FolderNewsMark;
@@ -60,6 +61,7 @@ import org.rssowl.ui.internal.util.ModelUtils;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -73,6 +75,7 @@ import java.util.Set;
 public class MarkTypesReadAction extends Action implements IWorkbenchWindowActionDelegate {
   private IStructuredSelection fSelection;
   private INewsDAO fNewsDao;
+  private long fWithinMillis;
 
   /** Default Constructor */
   public MarkTypesReadAction() {
@@ -83,7 +86,17 @@ public class MarkTypesReadAction extends Action implements IWorkbenchWindowActio
    * @param selection
    */
   public MarkTypesReadAction(IStructuredSelection selection) {
+    this(selection, 0);
+  }
+
+  /**
+   * @param selection The selection to mark read.
+   * @param withinMillis Keep news within this period unread and mark older
+   * news read, or <code>0</code> to mark all news read.
+   */
+  public MarkTypesReadAction(IStructuredSelection selection, long withinMillis) {
     fSelection = selection;
+    fWithinMillis = withinMillis;
     fNewsDao = OwlDAO.getDAO(INewsDAO.class);
   }
 
@@ -146,6 +159,10 @@ public class MarkTypesReadAction extends Action implements IWorkbenchWindowActio
     else
       news = resolveNews(entities, retentionHelperMap);
 
+    /* Keep recent news unread and mark older news read */
+    if (fWithinMillis > 0)
+      news = filterByDate(news, fWithinMillis);
+
     /* Only affect equivalent News if not all News are affected */
     boolean affectEquivalentNews = OwlUI.markReadDuplicates() && !equalsRootFolders(folders);
 
@@ -194,7 +211,38 @@ public class MarkTypesReadAction extends Action implements IWorkbenchWindowActio
     }
   }
 
-  private Collection<INews> getNews(FeedView feedView) {
+  private Collection<INews> filterByDate(Collection<INews> news, long withinMillis) {
+    long now = System.currentTimeMillis();
+    Set<INews> filteredNews = new HashSet<>();
+    for (INews item : news) {
+      if (isNewsOlderThanRange(item, withinMillis, now))
+        filteredNews.add(item);
+    }
+
+    return filteredNews;
+  }
+
+  /**
+   * Returns whether the given News is older than the selected time range and
+   * should therefore be marked read. The date shown in the News table is used,
+   * so the filter matches what the user sees. News without any date is not
+   * marked read because its age cannot be determined.
+   *
+   * @param news The News to check.
+   * @param withinMillis News within this period are kept unread, or
+   * <code>0</code> to mark all News read.
+   * @param now The current time in milliseconds.
+   * @return <code>true</code> if the News is older than the selected range.
+   */
+  public static boolean isNewsOlderThanRange(INews news, long withinMillis, long now) {
+    if (withinMillis <= 0)
+      return true;
+
+    Date date = DateUtils.getRecentDate(news);
+    return date != null && date.getTime() < now - withinMillis;
+  }
+
+  static Collection<INews> getNews(FeedView feedView) {
     Set<INews.State> enumSet = INews.State.asSet(INews.State.NEW, INews.State.UNREAD, INews.State.UPDATED);
 
     Collection<INews> newsCache = feedView.getCachedNewsCopy();

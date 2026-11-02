@@ -119,6 +119,18 @@
             class="org.rssowl.core.internal.connection.ReaderProtocolHandler"
             protocol="readers"/>
       <protocolHandler
+            class="org.rssowl.core.internal.connection.FeverProtocolHandler"
+            protocol="fever"/>
+      <protocolHandler
+            class="org.rssowl.core.internal.connection.FeverProtocolHandler"
+            protocol="fevers"/>
+      <protocolHandler
+            class="org.rssowl.core.internal.connection.GReaderProtocolHandler"
+            protocol="greader"/>
+      <protocolHandler
+            class="org.rssowl.core.internal.connection.GReaderProtocolHandler"
+            protocol="greaders"/>
+      <protocolHandler
             class="org.rssowl.core.internal.connection.ShellProtocolHandler"
             protocol="shell"/>
    </extension>

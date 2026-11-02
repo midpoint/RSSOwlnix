@@ -2,7 +2,7 @@
 <feature
       id="org.rssowl"
       label="RSSOwlnix"
-      version="2.10.0.qualifier"
+      version="3.0.1.qualifier"
       provider-name="https://github.com/Xyrio/RSSOwlnix"
       plugin="org.rssowl.ui">
 
@@ -283,6 +283,13 @@ litigation.
          download-size="0"
          install-size="0"
          version="0.0.0"/>
+
+   <plugin
+         id="org.rssowl.i18n"
+         download-size="0"
+         install-size="0"
+         version="0.0.0"
+         unpack="false"/>
 
    <plugin
          id="org.rssowl.ui"

@@ -105,6 +105,7 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -618,7 +619,7 @@ public class DefaultProtocolHandler implements IProtocolHandler {
             }
           }
         }
-        ((HttpPost) method).setEntity(new UrlEncodedFormEntity(params));
+        ((HttpPost) method).setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
       }
 
       Registry<ConnectionSocketFactory> socketFactoryRegistry = registryBuilder.build();

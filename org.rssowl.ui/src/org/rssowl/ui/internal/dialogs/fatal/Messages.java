@@ -25,6 +25,7 @@
 package org.rssowl.ui.internal.dialogs.fatal;
 
 import org.eclipse.osgi.util.NLS;
+import org.rssowl.core.util.ExternalMessages;
 
 public class Messages extends NLS {
   private static final String BUNDLE_NAME = "org.rssowl.ui.internal.dialogs.fatal.messages"; //$NON-NLS-1$
@@ -88,6 +89,6 @@ public class Messages extends NLS {
 
   static {
     // initialize resource bundle
-    NLS.initializeMessages(BUNDLE_NAME, Messages.class);
+    ExternalMessages.initializeMessages(BUNDLE_NAME, Messages.class);
   }
 }

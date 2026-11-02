@@ -25,6 +25,7 @@
 package org.rssowl.ui.internal.dialogs.preferences;
 
 import org.eclipse.osgi.util.NLS;
+import org.rssowl.core.util.ExternalMessages;
 
 public class Messages extends NLS {
   private static final String BUNDLE_NAME = "org.rssowl.ui.internal.dialogs.preferences.messages"; //$NON-NLS-1$
@@ -170,10 +171,26 @@ public class Messages extends NLS {
   public static String SharingPreferencesPage_SELECT_ALL;
   public static String SharingPreferencesPage_SELECT_COMMUNITY;
 
+  public static String LanguagePreferencePage_DESCRIPTION;
+  public static String LanguagePreferencePage_ENGLISH;
+  public static String LanguagePreferencePage_EXPORT;
+  public static String LanguagePreferencePage_EXPORT_DONE;
+  public static String LanguagePreferencePage_EXPORT_EXISTS;
+  public static String LanguagePreferencePage_EXPORT_FAILED;
+  public static String LanguagePreferencePage_EXPORT_NO_BUILT_IN;
+  public static String LanguagePreferencePage_LANGUAGE;
+  public static String LanguagePreferencePage_OPEN_FAILED;
+  public static String LanguagePreferencePage_OPEN_FOLDER;
+  public static String LanguagePreferencePage_PACK_FOLDER;
+  public static String LanguagePreferencePage_RESTART;
+  public static String LanguagePreferencePage_RESTART_TITLE;
+  public static String LanguagePreferencePage_SAVE_FAILED;
+  public static String LanguagePreferencePage_SYSTEM_DEFAULT;
+
   private Messages() {}
 
   static {
     // initialize resource bundle
-    NLS.initializeMessages(BUNDLE_NAME, Messages.class);
+    ExternalMessages.initializeMessages(BUNDLE_NAME, Messages.class);
   }
 }
