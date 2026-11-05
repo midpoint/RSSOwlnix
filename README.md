@@ -1,8 +1,20 @@
-# RSSOwlnix 3.0.1
+# RSSOwlnix 3.0.2
 
 [简体中文](README_zh_CN.md)
 
 RSSOwlnix is a fork of RSSOwl, an RSS/Atom feed reader built on Eclipse RCP.
+
+## What's new in 3.0.2
+
+### Keyboard shortcut persistence
+
+- Fixed custom keyboard shortcuts reverting to their defaults after the application was terminated without a clean shutdown (forced quit, Windows logoff or restart, crash or power loss).
+- Shortcut changes made in **Preferences > Keys** are now written to disk immediately when applied, instead of waiting for the preferences dialog to be closed with "Apply and Close" or for a clean workbench shutdown.
+
+### Packaging
+
+- Project and bundle versions upgraded to **3.0.2**.
+- Rebuilt the Windows x86_64 installer as `RSSOwlnix-3.0.2-win32.win32.x86_64-Setup.exe`.
 
 ## What's new in 3.0.1
 

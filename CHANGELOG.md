@@ -1,5 +1,10 @@
 updates feed: https://xyrio.github.io/RSSOwlnix-site/updates.rss
 
+# 3.0.2
+- persist keyboard shortcut changes immediately so custom bindings survive a forced quit, logoff, crash or power loss
+- rebuilt the Windows x86_64 installer as RSSOwlnix-3.0.2-win32.win32.x86_64-Setup.exe
+- upgraded the version to 3.0.2
+
 # 3.0.1
 - added multi-language support with a Language preference page, built-in English and Simplified Chinese translations, and external UTF-8 language packs under `language-packs/<locale>/` that override messages and plugin.xml labels without rebuilding
 - added early localization of menu, view and preference labels so external packs apply on the next start, and export language packs as directly editable UTF-8 files

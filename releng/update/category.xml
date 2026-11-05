@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <site>
-   <feature url="features/org.rssowl.dependencies.updater_3.0.1.qualifier.jar" id="org.rssowl.dependencies.updater" version="3.0.1.qualifier">
+   <feature url="features/org.rssowl.dependencies.updater_3.0.2.qualifier.jar" id="org.rssowl.dependencies.updater" version="3.0.2.qualifier">
       <category name="rssowlnix.program"/>
    </feature>
-   <feature url="features/org.rssowl.dependencies_3.0.1.qualifier.jar" id="org.rssowl.dependencies" version="3.0.1.qualifier">
+   <feature url="features/org.rssowl.dependencies_3.0.2.qualifier.jar" id="org.rssowl.dependencies" version="3.0.2.qualifier">
       <category name="rssowlnix.program"/>
    </feature>
-   <feature url="features/org.rssowl_3.0.1.qualifier.jar" id="org.rssowl" version="3.0.1.qualifier">
+   <feature url="features/org.rssowl_3.0.2.qualifier.jar" id="org.rssowl" version="3.0.2.qualifier">
       <category name="rssowlnix.program"/>
    </feature>
    <category-def name="rssowlnix.program" label="RSSOwlnix Update"/>

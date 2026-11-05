@@ -1,8 +1,20 @@
-# RSSOwlnix 3.0.1
+# RSSOwlnix 3.0.2
 
 [English](README.md) | 简体中文
 
 RSSOwlnix 是 RSSOwl 的 fork，一个基于 Eclipse RCP 构建的 RSS/Atom 阅读器。
+
+## 3.0.2 更新内容
+
+### 快捷键持久化
+
+- 修复应用非正常退出（强制结束进程、Windows 注销或重启、崩溃、断电）后自定义快捷键恢复默认值的问题。
+- 在 **设置 > 按键** 中修改快捷键并应用后立即写入磁盘，不再等待首选项对话框点击“应用并关闭”或工作台正常关闭。
+
+### 打包
+
+- 项目和 bundle 版本升级到 **3.0.2**。
+- 重新构建 Windows x86_64 安装程序：`RSSOwlnix-3.0.2-win32.win32.x86_64-Setup.exe`。
 
 ## 3.0.1 更新内容
 

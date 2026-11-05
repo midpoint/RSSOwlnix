@@ -30,7 +30,7 @@
  *
  * Then run makensis from the releng/product directory, for example:
  *   makensis /DPRODUCT_DIR=target/products/org.rssowl.ui.product/win32/win32/x86_64/RSSOwlnix \
- *            /DOUTPUT_FILE=target/products/RSSOwlnix-3.0.1-win32.win32.x86_64-Setup.exe \
+ *            /DOUTPUT_FILE=target/products/RSSOwlnix-3.0.2-win32.win32.x86_64-Setup.exe \
  *            rssowl_installer.nsi
  *
  * PRODUCT_DIR, PRODUCT_ICON and OUTPUT_FILE can be overridden on the command
@@ -41,7 +41,7 @@ Unicode true
 
 !define PRODUCT_NAME "RSSOwlnix"
 !define PRODUCT_EXE "RSSOwlnix.exe"
-!define PRODUCT_VERSION "3.0.1"
+!define PRODUCT_VERSION "3.0.2"
 !define PRODUCT_PUBLISHER "RSSOwlnix"
 !define PRODUCT_WEB_SITE "https://github.com/RSSOwlnix/RSSOwlnix"
 

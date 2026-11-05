@@ -26,10 +26,15 @@ package org.rssowl.ui.internal;
 
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.core.runtime.SafeRunner;
+import org.eclipse.core.runtime.preferences.IEclipsePreferences;
+import org.eclipse.core.runtime.preferences.IEclipsePreferences.IPreferenceChangeListener;
+import org.eclipse.core.runtime.preferences.IEclipsePreferences.PreferenceChangeEvent;
+import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.eclipse.ui.application.IWorkbenchConfigurer;
 import org.eclipse.ui.application.IWorkbenchWindowConfigurer;
 import org.eclipse.ui.application.WorkbenchAdvisor;
 import org.eclipse.ui.application.WorkbenchWindowAdvisor;
+import org.osgi.service.prefs.BackingStoreException;
 import org.rssowl.core.util.LoggingSafeRunnable;
 import org.rssowl.core.util.SecurityUtils;
 
@@ -40,6 +45,14 @@ public class ApplicationWorkbenchAdvisor extends WorkbenchAdvisor {
 
   /* Default Perspective */
   private static final String PERSPECTIVE_ID = "org.rssowl.ui.perspective"; //$NON-NLS-1$
+
+  /* Preference node and keys that hold the keyboard shortcut configuration */
+  private static final String WORKBENCH_PREFS_NODE = "org.eclipse.ui.workbench"; //$NON-NLS-1$
+  private static final String COMMANDS_PREF_KEY = "org.eclipse.ui.commands"; //$NON-NLS-1$
+  private static final String KEY_CONFIGURATION_PREF_KEY = "KEY_CONFIGURATION_ID"; //$NON-NLS-1$
+
+  /* Ensure the flush listener is only installed once per JVM */
+  private static boolean fgKeyBindingFlushInstalled;
 
   /** Keep a static reference to the primary Workbench Window Advisor */
   public static ApplicationWorkbenchWindowAdvisor fgPrimaryApplicationWorkbenchWindowAdvisor;
@@ -122,6 +135,38 @@ public class ApplicationWorkbenchAdvisor extends WorkbenchAdvisor {
     workbenchConfigurer.setSaveAndRestore(true);
 
     super.initialize(configurer);
+
+    installKeyBindingsFlush();
+  }
+
+  /*
+   * Keyboard shortcuts edited in the Keys preference page are only written to
+   * the workbench preference store in memory. Eclipse flushes that store when
+   * the preferences dialog is closed with OK or when the workbench shuts down
+   * cleanly. If the application is terminated without a clean shutdown (forced
+   * quit, logoff, power loss or crash) the changed shortcuts are silently lost
+   * and the defaults are restored on the next start. Flushing the node as soon
+   * as the bindings change makes them durable immediately.
+   */
+  private void installKeyBindingsFlush() {
+    if (fgKeyBindingFlushInstalled)
+      return;
+    fgKeyBindingFlushInstalled = true;
+
+    final IEclipsePreferences node = InstanceScope.INSTANCE.getNode(WORKBENCH_PREFS_NODE);
+    node.addPreferenceChangeListener(new IPreferenceChangeListener() {
+      @Override
+      public void preferenceChange(PreferenceChangeEvent event) {
+        String key = event.getKey();
+        if (COMMANDS_PREF_KEY.equals(key) || KEY_CONFIGURATION_PREF_KEY.equals(key)) {
+          try {
+            node.flush();
+          } catch (BackingStoreException e) {
+            Activator.getDefault().logError("Failed to persist keyboard shortcut preferences.", e); //$NON-NLS-1$
+          }
+        }
+      }
+    });
   }
 
   /**

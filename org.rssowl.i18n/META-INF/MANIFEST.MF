@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: RSSOwlnix External Localization
 Bundle-SymbolicName: org.rssowl.i18n;singleton:=true
-Bundle-Version: 3.0.1.qualifier
+Bundle-Version: 3.0.2.qualifier
 Bundle-Activator: org.rssowl.i18n.Activator
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Bundle-Vendor: https://github.com/Xyrio/RSSOwlnix
